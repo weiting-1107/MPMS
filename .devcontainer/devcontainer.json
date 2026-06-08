@@ -1,0 +1,21 @@
+{
+  "name": "MPMS Dev Container",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspace",
+  "forwardPorts": [5105, 1433],
+  "portsAttributes": {
+    "5105": {
+      "label": "MPMS Web App",
+      "onAutoForward": "openBrowser"
+    },
+    "1433": {
+      "label": "SQL Server",
+      "onAutoForward": "ignore"
+    }
+  },
+  "containerEnv": {
+    "ConnectionStrings__DefaultConnection": "Server=db;Database=master;User Id=sa;Password=YourStrong!Password;TrustServerCertificate=True;"
+  },
+  "postCreateCommand": "dotnet build && dotnet run --project .devcontainer/DbInit/DbInit.csproj"
+}

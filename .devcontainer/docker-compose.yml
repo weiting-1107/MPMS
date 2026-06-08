@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/dotnet:9.0
+    volumes:
+      - ..:/workspace:cached
+    command: /bin/sh -c "while sleep 1000; do :; done"
+    environment:
+      - ConnectionStrings__DefaultConnection=Server=db;Database=master;User Id=sa;Password=YourStrong!Password;TrustServerCertificate=True;
+    ports:
+      - "5105:5105"
+    depends_on:
+      - db
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=YourStrong!Password
+    ports:
+      - "1433:1433"
