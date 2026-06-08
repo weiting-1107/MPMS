@@ -1,0 +1,178 @@
+@model IEnumerable<MPMS.Models.Project>
+@{
+    ViewData["Title"] = "全局專案看板";
+    var phases = ViewBag.Phases as IEnumerable<MPMS.Models.ProjectPhase> ?? new List<MPMS.Models.ProjectPhase>();
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold text-dark mb-1">全局專案看板</h2>
+        <p class="text-muted mb-0">跨專案唯讀進度追蹤與專案階段進度展示</p>
+    </div>
+    @if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
+    {
+        <div>
+            <a href="/Project/Manage" class="btn btn-dark rounded-3 px-4 py-2">
+                ⚙️ 專案管理後台
+            </a>
+        </div>
+    }
+</div>
+
+<div class="row g-4">
+    @if (!Model.Any())
+    {
+        <div class="col-12">
+            <div class="card border-0 shadow-sm rounded-4 text-center py-5">
+                <div class="card-body">
+                    <span class="fs-1">📁</span>
+                    <h4 class="mt-3 fw-bold">尚無任何專案</h4>
+                    <p class="text-muted">系統中目前沒有建立任何專案，請聯絡 PM 或 Admin 建立專案。</p>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        @foreach (var proj in Model)
+        {
+            var projPhases = phases.Where(p => p.ProjectId == proj.ProjectId).OrderBy(p => p.SortNo);
+            
+            <div class="col-12">
+                <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+                    <div class="card-body p-4 p-md-5">
+                        
+                        <!-- Project Header -->
+                        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+                            <div>
+                                <span class="badge bg-light text-dark border px-2.5 py-1.5 rounded-pill mb-2">@proj.ProjectCode</span>
+                                <h3 class="fw-bold text-dark mb-1">@proj.ProjectName</h3>
+                                <p class="text-muted small mb-0">
+                                    📅 專案期程：@proj.StartDate.ToString("yyyy-MM-dd") ~ @proj.EndDate.ToString("yyyy-MM-dd")
+                                    <span class="mx-2">|</span>
+                                    👤 專案經理 (PM)：<strong>@proj.PmUserName</strong>
+                                </p>
+                            </div>
+                            <div class="d-flex flex-column align-items-end gap-2">
+                                @if (proj.ProjectStatus == "Active")
+                                {
+                                    <span class="badge bg-success fs-6 px-3 py-2 rounded-3">進行中 (Active)</span>
+                                }
+                                else if (proj.ProjectStatus == "Planning")
+                                {
+                                    <span class="badge bg-warning text-dark fs-6 px-3 py-2 rounded-3">規劃中 (Planning)</span>
+                                }
+                                else if (proj.ProjectStatus == "Hold")
+                                {
+                                    <span class="badge bg-danger fs-6 px-3 py-2 rounded-3">暫停 (Hold)</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary fs-6 px-3 py-2 rounded-3">已結案 (Closed)</span>
+                                }
+                                <a href="/Gantt?projectId=@proj.ProjectId" class="btn btn-sm btn-outline-primary rounded-3 mt-1">
+                                    📊 甘特圖檢視
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Project Desc -->
+                        @if (!string.IsNullOrEmpty(proj.ProjectDesc))
+                        {
+                            <div class="bg-light rounded-3 p-3 mb-4 text-muted small">
+                                @proj.ProjectDesc
+                            </div>
+                        }
+
+                        <!-- Project Progress -->
+                        <div class="mb-5">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="fw-semibold text-dark">專案整體進度 (PM 手動調整)</span>
+                                <span class="fw-bold text-primary fs-5">@proj.ManualProgressPct.ToString("0")%</span>
+                            </div>
+                            <div class="progress rounded-pill mb-2" style="height: 14px; background-color: #e2e8f0;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated rounded-pill" role="progressbar" 
+                                     style="width: @proj.ManualProgressPct%; background: linear-gradient(90deg, #6366f1 0%, #4f46e5 100%);" 
+                                     aria-valuenow="@proj.ManualProgressPct" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                            @if (!string.IsNullOrEmpty(proj.ProgressNote))
+                            {
+                                <p class="text-muted small mb-0">💬 <strong>進度說明：</strong>@proj.ProgressNote</p>
+                            }
+                        </div>
+
+                        <!-- Phases Section -->
+                        <div>
+                            <h5 class="fw-bold text-dark mb-3">📍 專案階段進度</h5>
+                            <div class="row g-3">
+                                @if (!projPhases.Any())
+                                {
+                                    <div class="col-12">
+                                        <p class="text-muted small mb-0">本專案目前未設定任何專案階段。</p>
+                                    </div>
+                                }
+                                else
+                                {
+                                    @foreach (var ph in projPhases)
+                                    {
+                                        <div class="col-md-6 col-lg-4">
+                                            <div class="border rounded-4 p-3 bg-white h-100 d-flex flex-column justify-content-between">
+                                                <div>
+                                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                                        <h6 class="fw-bold text-dark mb-0 text-truncate" style="max-width: 70%;">@ph.PhaseName</h6>
+                                                        @if (ph.PhaseStatus == "Completed")
+                                                        {
+                                                            <span class="badge bg-success px-2 py-1 rounded-3 small">已完成</span>
+                                                        }
+                                                        else if (ph.PhaseStatus == "Active")
+                                                        {
+                                                            <span class="badge bg-primary px-2 py-1 rounded-3 small">進行中</span>
+                                                        }
+                                                        else if (ph.PhaseStatus == "Voided")
+                                                        {
+                                                            <span class="badge bg-danger px-2 py-1 rounded-3 small">作廢</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="badge bg-light text-dark border px-2 py-1 rounded-3 small">規劃中</span>
+                                                        }
+                                                    </div>
+                                                    <p class="text-muted small mb-3">📅 期間：@ph.StartDate.ToString("yyyy-MM-dd") ~ @ph.EndDate.ToString("yyyy-MM-dd")</p>
+                                                </div>
+                                                
+                                                <div>
+                                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                                        <span class="text-muted small">進度</span>
+                                                        <span class="fw-semibold text-primary small">@ph.ManualProgressPct.ToString("0")%</span>
+                                                    </div>
+                                                    <div class="progress rounded-pill mb-2" style="height: 8px; background-color: #f1f5f9;">
+                                                        <div class="progress-bar rounded-pill" role="progressbar" 
+                                                             style="width: @ph.ManualProgressPct%; background-color: @(ph.PhaseStatus == "Completed" ? "#10b981" : "#4f46e5");" 
+                                                             aria-valuenow="@ph.ManualProgressPct" aria-valuemin="0" aria-valuemax="100"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</div>         </div>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</div>

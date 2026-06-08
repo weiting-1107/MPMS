@@ -1,0 +1,213 @@
+@model IEnumerable<MPMS.Models.Notification>
+@{
+    ViewData["Title"] = "站內通知中心";
+}
+
+<div class="row mb-4 align-items-center">
+    <div class="col">
+        <h2 class="fw-bold text-dark mb-1">🔔 站內通知中心</h2>
+        <p class="text-muted mb-0">查閱與您負責、協辦任務或專案相關的即時通知</p>
+    </div>
+    @if (Model != null && Model.Any(n => !n.IsRead))
+    {
+        <div class="col-auto">
+            <form asp-action="MarkAllAsRead" method="post">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-outline-primary px-3 rounded-pill">
+                    ✓ 全部標記為已讀
+                </button>
+            </form>
+        </div>
+    }
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show border-0 shadow-sm mb-4" role="alert">
+        🎉 @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-10 col-xl-8">
+        
+        <div class="notifications-container">
+            @if (Model == null || !Model.Any())
+            {
+                <div class="card border-0 shadow-sm text-center py-5 text-muted">
+                    <div class="card-body">
+                        <div class="fs-1 mb-2">📭</div>
+                        <h5 class="fw-bold text-dark mb-1">目前沒有任何通知</h5>
+                        <p class="mb-0">當系統指派新任務、審查被退回、或有其他狀態異動時，會在這裡顯示提醒。</p>
+                    </div>
+                </div>
+            }
+            else
+            {
+                foreach (var n in Model)
+                {
+                    <div class="card border-0 shadow-sm mb-3 notification-card @(n.IsRead ? "bg-white" : "bg-unread")" id="notif-card-@n.NotificationId">
+                        <div class="card-body p-3">
+                            <div class="d-flex align-items-start">
+                                <div class="notif-icon-box rounded-circle me-3 d-flex align-items-center justify-content-center" style="width:40px; height:40px; flex-shrink:0;">
+                                    @switch (n.EventType)
+                                    {
+                                        case "OverdueReminder":
+                                            <span class="fs-5">⚠️</span>
+                                            break;
+                                        case "NewTask":
+                                        case "OwnerChanged":
+                                            <span class="fs-5">📌</span>
+                                            break;
+                                        case "ReviewRequested":
+                                            <span class="fs-5">🔍</span>
+                                            break;
+                                        case "ReviewApproved":
+                                            <span class="fs-5">🎉</span>
+                                            break;
+                                        case "ReviewRejected":
+                                        case "MeetingReturn":
+                                            <span class="fs-5">🚫</span>
+                                            break;
+                                        case "TaskBlocked":
+                                            <span class="fs-5">🚧</span>
+                                            break;
+                                        case "SealSnapshot":
+                                            <span class="fs-5">📦</span>
+                                            break;
+                                        default:
+                                            <span class="fs-5">🔔</span>
+                                            break;
+                                    }
+                                </div>
+                                <div class="flex-grow-1">
+                                    <div class="d-flex justify-content-between align-items-start mb-1">
+                                        <h6 class="fw-bold text-dark mb-0 d-flex align-items-center">
+                                            @n.Title
+                                            @if (!n.IsRead)
+                                            {
+                                                <span class="badge bg-danger rounded-pill ms-2 unread-dot" style="font-size: 0.5rem; padding: 4px;"> </span>
+                                            }
+                                        </h6>
+                                        <small class="text-muted font-monospace">@n.CreatedAt.ToString("yyyy-MM-dd HH:mm")</small>
+                                    </div>
+                                    <p class="text-muted mb-2 fs-7" style="line-height: 1.5;">
+                                        @n.Message
+                                    </p>
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <div>
+                                            @if (n.RefType == "TASK" && n.RefId.HasValue)
+                                            {
+                                                <a href="/Task/Details/@n.RefId" class="btn btn-xs btn-outline-indigo px-3 rounded-pill">
+                                                    🔍 查看任務詳情
+                                                </a>
+                                            }
+                                            else if (n.RefType == "MEETING" && n.RefId.HasValue)
+                                            {
+                                                <a href="/Meeting/Index/@n.RefId" class="btn btn-xs btn-outline-indigo px-3 rounded-pill">
+                                                    🖥️ 進入週會控制台
+                                                </a>
+                                            }
+                                        </div>
+                                        @if (!n.IsRead)
+                                        {
+                                            <button type="button" class="btn btn-xs btn-outline-secondary px-3 rounded-pill btn-mark-read" onclick="markAsRead(@n.NotificationId)">
+                                                ✓ 標記為已讀
+                                            </button>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function markAsRead(id) {
+            var token = $('input[name="__RequestVerificationToken"]').val();
+            
+            $.post('/Notification/MarkAsRead', {
+                id: id,
+                __RequestVerificationToken: token
+            })
+            .done(function(response) {
+                if (response.success) {
+                    // Update card style
+                    var card = $('#notif-card-' + id);
+                    card.removeClass('bg-unread').addClass('bg-white');
+                    card.find('.unread-dot').fadeOut();
+                    card.find('.btn-mark-read').fadeOut();
+                    
+                    // Decrement navbar unread count
+                    var badge = $('#notificationBadgeCount');
+                    if (badge.length > 0) {
+                        var count = parseInt(badge.text());
+                        if (!isNaN(count) && count > 0) {
+                            count--;
+                            if (count === 0) {
+                                badge.fadeOut();
+                            } else {
+                                badge.text(count);
+                            }
+                        }
+                    }
+                } else {
+                    alert('標記失敗：' + response.message);
+                }
+            })
+            .fail(function() {
+                alert('網路連線錯誤。');
+            });
+        }
+    </script>
+}
+
+<style>
+    .bg-unread {
+        background-color: rgba(99, 102, 241, 0.05) !important;
+        border-left: 4px solid #6366f1 !important;
+    }
+    
+    .notification-card {
+        transition: all 0.2s ease;
+        border: 1px solid rgba(226, 232, 240, 0.8);
+    }
+    
+    .notification-card:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03) !important;
+    }
+    
+    .notif-icon-box {
+        background-color: #f1f5f9;
+        color: #475569;
+    }
+    
+    .bg-unread .notif-icon-box {
+        background-color: rgba(99, 102, 241, 0.15);
+        color: #4f46e5;
+    }
+
+    .btn-outline-indigo {
+        color: #4f46e5;
+        border-color: #4f46e5;
+    }
+    .btn-outline-indigo:hover {
+        background-color: #4f46e5;
+        color: white;
+    }
+    .btn-xs {
+        padding: 0.25rem 0.75rem;
+        font-size: 0.75rem;
+    }
+    .fs-7 {
+        font-size: 0.9rem;
+    }
+</style>

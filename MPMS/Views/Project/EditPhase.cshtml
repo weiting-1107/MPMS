@@ -1,0 +1,73 @@
+@model MPMS.Models.ProjectPhase
+@{
+    var project = ViewBag.Project as MPMS.Models.Project ?? new MPMS.Models.Project();
+    ViewData["Title"] = "編輯專案階段";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-transparent border-0 pt-4 px-4">
+                <h4 class="card-title fw-bold text-dark mb-1">編輯專案階段</h4>
+                <p class="text-muted small mb-0">修改專案「@project.ProjectName」底下的專案階段設定</p>
+            </div>
+            
+            <div class="card-body px-4 pb-4">
+                <hr class="mt-0 mb-4">
+
+                <!-- Date guide -->
+                <div class="alert alert-warning rounded-3 mb-4" role="alert">
+                    <h6 class="fw-bold mb-1">📅 專案時程限制提示</h6>
+                    <p class="small mb-0">專案起訖日期為：<strong>@project.StartDate.ToString("yyyy-MM-dd") ~ @project.EndDate.ToString("yyyy-MM-dd")</strong>。此專案階段的「起訖日期」必須落在這個區間內。</p>
+                </div>
+                
+                <form asp-action="EditPhase" method="post">
+                    @if (!ViewData.ModelState.IsValid)
+                    {
+                        <div class="alert alert-danger rounded-3" role="alert">
+                            <div asp-validation-summary="All"></div>
+                        </div>
+                    }
+
+                    <input type="hidden" asp-for="PhaseId" />
+                    <input type="hidden" asp-for="ProjectId" />
+
+                    <div class="row g-3">
+                        <!-- Phase Name -->
+                        <div class="col-md-8 mb-3">
+                            <label asp-for="PhaseName" class="form-label fw-semibold">專案階段名稱</label>
+                            <input asp-for="PhaseName" class="form-control rounded-3" placeholder="例如: 需求分析與系統設計階段" required />
+                            <span asp-validation-for="PhaseName" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Sort Order -->
+                        <div class="col-md-4 mb-3">
+                            <label asp-for="SortNo" class="form-label fw-semibold">排序值</label>
+                            <input asp-for="SortNo" type="number" class="form-control rounded-3" required />
+                            <span asp-validation-for="SortNo" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Start Date -->
+                        <div class="col-md-6 mb-3">
+                            <label asp-for="StartDate" class="form-label fw-semibold">開始日期</label>
+                            <input asp-for="StartDate" type="date" class="form-control rounded-3" required />
+                            <span asp-validation-for="StartDate" class="text-danger small"></span>
+                        </div>
+
+                        <!-- End Date -->
+                        <div class="col-md-6 mb-3">
+                            <label asp-for="EndDate" class="form-label fw-semibold">結束日期</label>
+                            <input asp-for="EndDate" type="date" class="form-control rounded-3" required />
+                            <span asp-validation-for="EndDate" class="text-danger small"></span>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <a href="/Project/Phases?projectId=@project.ProjectId" class="btn btn-outline-secondary rounded-3 px-4 py-2">取消</a>
+                        <button type="submit" class="btn btn-primary rounded-3 px-4 py-2">確認修改</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

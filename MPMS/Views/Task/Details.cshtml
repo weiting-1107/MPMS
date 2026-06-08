@@ -1,0 +1,544 @@
+@model MPMS.Models.TaskModel
+@{
+    ViewData["Title"] = $"任務詳情：{Model.TaskTitle}";
+    var statusLogs = ViewBag.StatusLogs as IEnumerable<MPMS.Models.TaskStatusLog> ?? new List<MPMS.Models.TaskStatusLog>();
+    var reviews = ViewBag.Reviews as IEnumerable<MPMS.Models.TaskReview> ?? new List<MPMS.Models.TaskReview>();
+    
+    // Determine permissions
+    var currentUserId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "0");
+    var isOwner = Model.OwnerUserId == currentUserId;
+    var isAssist = Model.AssistUserIds.Contains(currentUserId);
+    var isAdmin = User.IsInRole("ADMIN");
+    var isPm = User.IsInRole("PM");
+    var canManageTask = isAdmin || isPm || isOwner;
+    var canReview = (isAdmin || isPm || isAssist) && !isOwner && Model.TaskStatus == "Reviewing";
+
+    var rowVersionStr = Model.RowVersion != null ? Convert.ToBase64String(Model.RowVersion) : "";
+    var pendingReview = reviews.FirstOrDefault(r => r.ReviewResult == "Pending");
+    var reviewRowVersionStr = pendingReview?.RowVersion != null ? Convert.ToBase64String(pendingReview.RowVersion) : "";
+    var reviewId = pendingReview?.ReviewId ?? 0;
+    var isProjectMember = isOwner || isAssist || Model.ReviewerUserId == currentUserId || Model.BackupReviewerUserId == currentUserId || isPm || isAdmin;
+}
+
+<!-- Notification Messages -->
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show rounded-4 mb-4" role="alert">
+        <strong>✨ 成功：</strong>@TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show rounded-4 mb-4" role="alert">
+        <strong>⚠️ 警告：</strong>@TempData["ErrorMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+    <div>
+        <span class="badge bg-light text-dark border px-2.5 py-1.5 rounded-pill mb-2">專案：@Model.ProjectName &gt; 專案階段：@Model.PhaseName</span>
+        <h2 class="fw-bold text-dark mb-1">@Model.TaskTitle</h2>
+        <p class="text-muted small mb-0">
+            計畫時程：@(Model.PlannedStartDate?.ToString("yyyy-MM-dd") ?? "--") ~ @Model.DueDate.ToString("yyyy-MM-dd") 
+            <span class="mx-2">|</span> 優先度：
+            @if (Model.Priority == "High")
+            {
+                <span class="badge bg-danger">高 (High)</span>
+            }
+            else if (Model.Priority == "Normal")
+            {
+                <span class="badge bg-primary">中 (Normal)</span>
+            }
+            else
+            {
+                <span class="badge bg-secondary">低 (Low)</span>
+            }
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/Project/Phases?projectId=@Model.ProjectId" class="btn btn-outline-secondary rounded-3 px-3 py-2">
+            ⬅️ 返回專案階段
+        </a>
+        @if (isAdmin || isPm)
+        {
+            <a href="/Task/Edit/@Model.TaskId" class="btn btn-outline-dark rounded-3 px-3 py-2">
+                ✏️ 編輯任務
+            </a>
+        }
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Left Column: Task Info, Attachments, Logs -->
+    <div class="col-lg-8">
+        
+        <!-- Task Details -->
+        <div class="card border-0 shadow-sm rounded-4 mb-4">
+            <div class="card-body p-4">
+                <h5 class="fw-bold text-dark mb-3">📋 任務說明</h5>
+                <p class="text-muted" style="white-space: pre-wrap;">@(string.IsNullOrEmpty(Model.TaskDesc) ? "此任務無詳細描述說明。" : Model.TaskDesc)</p>
+                
+                @if (!string.IsNullOrEmpty(Model.CompleteSummary))
+                {
+                    <div class="bg-indigo-subtle text-indigo p-3 rounded-4 mt-4" style="background-color: #f5f3ff;">
+                        <h6 class="fw-bold text-dark mb-2">💡 完工摘要說明 (由負責人送審時提供)</h6>
+                        <p class="small mb-0" style="white-space: pre-wrap; color: #4338ca;">@Model.CompleteSummary</p>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Task Attachments (佐證附件) -->
+        <div class="card border-0 shadow-sm rounded-4 mb-4">
+            <div class="card-header bg-transparent border-0 pt-4 px-4 d-flex justify-content-between align-items-center">
+                <h5 class="card-title fw-bold text-dark mb-0">📎 任務佐證附件牆</h5>
+                @if (canManageTask && Model.TaskStatus != "Done")
+                {
+                    <button class="btn btn-sm btn-primary rounded-3" type="button" data-bs-toggle="collapse" data-bs-target="#uploadCollapse">
+                        ➕ 上傳附件
+                    </button>
+                }
+            </div>
+            <div class="card-body px-4 pb-4">
+                
+                <!-- Upload Collapse Form -->
+                @if (canManageTask && Model.TaskStatus != "Done")
+                {
+                    <div class="collapse mb-4" id="uploadCollapse">
+                        <div class="border rounded-4 p-4 bg-light">
+                            <h6 class="fw-bold text-dark mb-3">上傳完工佐證檔案</h6>
+                            <form asp-action="UploadAttachment" method="post" enctype="multipart/form-data">
+                                <input type="hidden" name="taskId" value="@Model.TaskId" />
+                                
+                                <div class="mb-3">
+                                    <label for="attachmentFile" class="form-label small fw-semibold">選擇檔案 (限制 50MB 內，格式限 PDF/Word/Excel/PPT/ZIP/圖片)</label>
+                                    <input type="file" class="form-control rounded-3" id="attachmentFile" name="file" required />
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="summaryText" class="form-label small fw-semibold">附件說明 / 完工摘要摘要 (必填)</label>
+                                    <textarea id="summaryText" name="summaryText" class="form-control rounded-3" rows="2" placeholder="請簡短描述此附件的內容及其如何佐證此任務之完工..." required></textarea>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="visibilityType" class="form-label small fw-semibold">可見範圍 / 機密設定</label>
+                                    <select id="visibilityType" name="visibilityType" class="form-select rounded-3">
+                                        <option value="Public">一般附件 (全員可見與下載)</option>
+                                        <option value="ProjectMember">機密附件 (僅專案成員可下載)</option>
+                                        <option value="Masked">遮蔽檔名與摘要 (全員遮蔽，專案成員可下載)</option>
+                                    </select>
+                                </div>
+                                
+                                <button type="submit" class="btn btn-sm btn-primary rounded-3 px-3">確認上傳</button>
+                            </form>
+                        </div>
+                    </div>
+                }
+
+                <div class="row g-3">
+                    @foreach (var att in Model.Attachments)
+                    {
+                        bool isMasked = att.VisibilityType == "Masked" && !isProjectMember;
+                        string displayName = isMasked ? "*** (機密附件)" : att.OriginalFileName;
+                        string displaySummary = isMasked ? "***" : att.SummaryText;
+                        string displaySize = isMasked ? "--" : $"大小：{(att.FileSizeBytes / 1024.0).ToString("0.0")} KB";
+                        
+                        bool canDownload = true;
+                        if (att.VisibilityType == "ProjectMember" || att.VisibilityType == "Masked")
+                        {
+                            canDownload = isProjectMember;
+                        }
+                        if (att.ScanStatus != "Passed" && att.UploadUserId != currentUserId && !isAdmin && !isPm)
+                        {
+                            canDownload = false;
+                        }
+
+                        <div class="col-md-6">
+                            <div class="border rounded-4 p-3 bg-white h-100 d-flex flex-column justify-content-between">
+                                <div>
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <span class="fs-4">
+                                            @if (att.FileExt == ".png" || att.FileExt == ".jpg" || att.FileExt == ".jpeg" || att.FileExt == ".gif")
+                                            {
+                                                <span>🖼️</span>
+                                            }
+                                            else
+                                            {
+                                                <span>📄</span>
+                                            }
+                                        </span>
+                                        @if (isAdmin)
+                                        {
+                                            <form asp-action="VoidAttachment" method="post" class="d-inline" onsubmit="return confirm('確定要作廢此附件嗎？作廢後不可恢復！');">
+                                                <input type="hidden" name="attachmentId" value="@att.AttachmentId" />
+                                                <input type="hidden" name="taskId" value="@Model.TaskId" />
+                                                <div class="input-group input-group-sm" style="max-width: 200px;">
+                                                    <input type="text" name="voidReason" class="form-control form-control-sm rounded-start-3" placeholder="作廢原因..." required />
+                                                    <button type="submit" class="btn btn-sm btn-danger rounded-end-3">作廢</button>
+                                                </div>
+                                            </form>
+                                        }
+                                    </div>
+                                    <h6 class="fw-bold text-dark text-truncate mb-1" title="@displayName">@displayName</h6>
+                                    <p class="text-muted small mb-1">
+                                        @displaySize 
+                                        @if (att.ScanStatus == "Pending")
+                                        {
+                                            <span class="badge bg-warning text-dark ms-2 small">🔍 掃描中</span>
+                                        }
+                                        else if (att.ScanStatus == "Failed")
+                                        {
+                                            <span class="badge bg-danger ms-2 small">⚠️ 掃描失敗</span>
+                                        }
+                                    </p>
+                                    <p class="text-dark small mb-3">💬 @displaySummary</p>
+                                </div>
+                                <div class="border-top pt-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <span class="text-muted small">👤 @(isMasked ? "***" : att.UploadUserName)<br><span class="x-small">@att.UploadedAt.ToString("MM-dd HH:mm")</span></span>
+                                    @if (canDownload && att.ScanStatus == "Passed")
+                                    {
+                                        <a href="/Task/DownloadAttachment/@att.AttachmentId" class="btn btn-sm btn-outline-primary rounded-3">📥 下載檔案</a>
+                                    }
+                                    else if (att.ScanStatus == "Pending")
+                                    {
+                                        <button class="btn btn-sm btn-outline-secondary rounded-3" disabled>🔍 掃描中</button>
+                                    }
+                                    else if (att.ScanStatus == "Failed")
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger rounded-3" disabled>⚠️ 拒絕下載</button>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-sm btn-outline-secondary rounded-3" disabled>🔒 權限不足</button>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Status Log (歷程記錄) -->
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-transparent border-0 pt-4 px-4">
+                <h5 class="card-title fw-bold text-dark mb-0">📜 任務異動歷程軌跡</h5>
+            </div>
+            <div class="card-body px-4 pb-4">
+                <hr class="mt-0 mb-4">
+                <div class="d-flex flex-column gap-3">
+                    @foreach (var log in statusLogs)
+                    {
+                        <div class="d-flex gap-3 align-items-start">
+                            <div class="bg-light p-2 rounded-circle fs-5" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                                🔄
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between align-items-center flex-wrap">
+                                    <span class="fw-bold text-dark">
+                                        狀態由 
+                                        <span class="badge bg-light text-dark border">@(string.IsNullOrEmpty(log.OldStatus) ? "NULL" : log.OldStatus)</span>
+                                        轉為 
+                                        <span class="badge bg-indigo text-white" style="background-color: #4f46e5;">@log.NewStatus</span>
+                                    </span>
+                                    <span class="text-muted small">@log.ChangedAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                                </div>
+                                <p class="text-muted small mb-0 mt-1">
+                                    👤 操作者：<strong>@log.OperatorUserName</strong>
+                                    @if (!string.IsNullOrEmpty(log.ChangeReason))
+                                    {
+                                        <span class="ms-2">| 💬 原因：@log.ChangeReason</span>
+                                    }
+                                </p>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Right Column: Task Status Actions, Member Info, Reviews -->
+    <div class="col-lg-4">
+        
+        <!-- Status Box & Actions -->
+        <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden">
+            <div class="card-body p-4">
+                <div class="text-center mb-4">
+                    <span class="text-muted small d-block mb-1">任務當前狀態</span>
+                    @if (Model.TaskStatus == "Todo")
+                    {
+                        <span class="badge bg-secondary fs-5 px-3 py-2 rounded-3">待處理 (Todo)</span>
+                    }
+                    else if (Model.TaskStatus == "Progress")
+                    {
+                        <span class="badge bg-primary fs-5 px-3 py-2 rounded-3">進行中 (Progress)</span>
+                    }
+                    else if (Model.TaskStatus == "Blocked")
+                    {
+                        <span class="badge bg-danger fs-5 px-3 py-2 rounded-3">卡關中 (Blocked)</span>
+                    }
+                    else if (Model.TaskStatus == "Reviewing")
+                    {
+                        <span class="badge bg-warning text-dark fs-5 px-3 py-2 rounded-3">審查中 (Reviewing)</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-success fs-5 px-3 py-2 rounded-3">已完成 (Done)</span>
+                    }
+                </div>
+
+                @if (Model.BlockedReason != null && Model.TaskStatus == "Blocked")
+                {
+                    <div class="alert alert-danger rounded-3 small mb-4">
+                        <strong class="d-block mb-1">🚨 卡關原因說明：</strong>
+                        @Model.BlockedReason
+                    </div>
+                }
+
+                <!-- Actions List for Responsible Person -->
+                @if (canManageTask && Model.TaskStatus != "Done" && Model.TaskStatus != "Reviewing")
+                {
+                    <hr>
+                    <h6 class="fw-bold text-dark mb-3">⚙️ 任務狀態更新</h6>
+                    <div class="d-flex flex-column gap-2">
+                        
+                        @if (Model.TaskStatus == "Todo")
+                        {
+                            <!-- Todo -> Progress -->
+                            <form asp-action="UpdateStatus" method="post">
+                                <input type="hidden" name="taskId" value="@Model.TaskId" />
+                                <input type="hidden" name="newStatus" value="Progress" />
+                                <input type="hidden" name="rowVersionStr" value="@rowVersionStr" />
+                                <button type="submit" class="btn btn-indigo w-100 py-2.5 rounded-3 text-white" style="background-color: #4f46e5;">🏁 開始執行任務</button>
+                            </form>
+                        }
+
+                        @if (Model.TaskStatus == "Progress")
+                        {
+                            <!-- Progress -> Blocked (Reason required) -->
+                            <button class="btn btn-outline-danger w-100 py-2 rounded-3" type="button" data-bs-toggle="collapse" data-bs-target="#blockedCollapse">
+                                🚨 回報卡關 (Blocked)
+                            </button>
+                            <div class="collapse mt-2" id="blockedCollapse">
+                                <form asp-action="UpdateStatus" method="post" class="border rounded-4 p-3 bg-light">
+                                    <input type="hidden" name="taskId" value="@Model.TaskId" />
+                                    <input type="hidden" name="newStatus" value="Blocked" />
+                                    <input type="hidden" name="rowVersionStr" value="@rowVersionStr" />
+                                    <div class="mb-2">
+                                        <label class="form-label small fw-semibold">卡關詳細原因 (必填)</label>
+                                        <textarea name="reason" class="form-control form-control-sm rounded-3" rows="2" placeholder="請填寫具體卡關的點與需要的協助..." required></textarea>
+                                    </div>
+                                    <button type="submit" class="btn btn-sm btn-danger rounded-3 w-100">確認回報卡關</button>
+                                </form>
+                            </div>
+
+                            <!-- Progress -> Reviewing (Attachment check, CompleteSummary >= 30 chars required) -->
+                            @if (Model.Attachments.Any())
+                            {
+                                <button class="btn btn-success w-100 py-2.5 rounded-3" type="button" data-bs-toggle="collapse" data-bs-target="#reviewCollapse">
+                                    🚀 完工送審 (Reviewing)
+                                </button>
+                                <div class="collapse mt-2" id="reviewCollapse">
+                                    <form asp-action="SubmitToReview" method="post" class="border rounded-4 p-3 bg-light" id="submitReviewForm">
+                                        <input type="hidden" name="taskId" value="@Model.TaskId" />
+                                        <input type="hidden" name="rowVersionStr" value="@rowVersionStr" />
+                                        <div class="mb-2">
+                                            <label class="form-label small fw-semibold">完工摘要說明 (至少 30 字以上)</label>
+                                            <textarea name="completeSummary" class="form-control form-control-sm rounded-3" id="completeSummaryText" rows="3" placeholder="請詳細寫下本任務的產出結果與重點..." required></textarea>
+                                            <div id="charCountTip" class="form-text small text-danger mt-1">目前字數：0 字 (還差 30 字)</div>
+                                        </div>
+                                        <button type="submit" class="btn btn-sm btn-success rounded-3 w-100" id="btnSubmitReview" disabled>確認完工送審</button>
+                                    </form>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="alert alert-warning rounded-3 small mb-0 text-center">
+                                    💡 請先上傳至少 1 個「完工佐證附件」後才能解鎖「完工送審」按鈕。
+                                </div>
+                            }
+                        }
+
+                        @if (Model.TaskStatus == "Blocked")
+                        {
+                            <!-- Blocked -> Progress -->
+                            <form asp-action="UpdateStatus" method="post">
+                                <input type="hidden" name="taskId" value="@Model.TaskId" />
+                                <input type="hidden" name="newStatus" value="Progress" />
+                                <input type="hidden" name="reason" value="卡關已排除，重新啟動" />
+                                <input type="hidden" name="rowVersionStr" value="@rowVersionStr" />
+                                <button type="submit" class="btn btn-primary w-100 py-2.5 rounded-3">🟢 卡關已解除，恢復執行</button>
+                            </form>
+                        }
+
+                    </div>
+                }
+
+                <!-- Peer Review Action Box (同儕審查) -->
+                @if (canReview)
+                {
+                    <hr>
+                    <h6 class="fw-bold text-dark mb-3">🛡️ 專案同儕審查控制面板</h6>
+                    <form asp-action="ProcessReview" method="post" class="border rounded-4 p-3 bg-light">
+                        <input type="hidden" name="taskId" value="@Model.TaskId" />
+                        <input type="hidden" name="taskRowVersionStr" value="@rowVersionStr" />
+                        <input type="hidden" name="reviewId" value="@reviewId" />
+                        <input type="hidden" name="reviewRowVersionStr" value="@reviewRowVersionStr" />
+                        
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">審查結果判定</label>
+                            <div class="d-flex gap-2">
+                                <input type="radio" class="btn-check" name="reviewResult" id="btnApprove" value="Approved" checked autocomplete="off">
+                                <label class="btn btn-sm btn-outline-success w-50 rounded-3" for="btnApprove">✔️ 通過 (Done)</label>
+
+                                <input type="radio" class="btn-check" name="reviewResult" id="btnReject" value="Rejected" autocomplete="off">
+                                <label class="btn btn-sm btn-outline-danger w-50 rounded-3" for="btnReject">❌ 退回 (Reject)</label>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="reviewComment" class="form-label small fw-semibold">審查意見 / 退回原因 (必填)</label>
+                            <textarea id="reviewComment" name="reviewComment" class="form-control form-control-sm rounded-3" rows="3" placeholder="請說明同意通過的理由或需修正退回的原因..." required></textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-sm btn-dark w-100 rounded-3 py-2">確認提交審查</button>
+                    </form>
+                }
+            </div>
+        </div>
+
+        <!-- Predecessor Tasks (前置相依任務) -->
+        <div class="card border-0 shadow-sm rounded-4 mb-4">
+            <div class="card-header bg-transparent border-0 pt-4 px-4">
+                <h5 class="card-title fw-bold text-dark mb-0">🔗 前置相依任務</h5>
+            </div>
+            <div class="card-body px-4 pb-4">
+                <hr class="mt-0 mb-3">
+                @if (Model.PredecessorTaskIds == null || !Model.PredecessorTaskIds.Any())
+                {
+                    <p class="text-muted small mb-0">無前置任務。</p>
+                }
+                else
+                {
+                    <div class="d-flex flex-column gap-2">
+                        @for (int i = 0; i < Model.PredecessorTaskIds.Count; i++)
+                        {
+                            var predId = Model.PredecessorTaskIds[i];
+                            var predTitle = i < Model.PredecessorTaskTitles.Count ? Model.PredecessorTaskTitles[i] : $"任務 #{predId}";
+                            <a href="/Task/Details/@predId" class="btn btn-sm btn-outline-secondary text-start rounded-3 w-100 py-2">
+                                📌 @predTitle
+                            </a>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Task Members Info -->
+        <div class="card border-0 shadow-sm rounded-4 mb-4">
+            <div class="card-header bg-transparent border-0 pt-4 px-4">
+                <h5 class="card-title fw-bold text-dark mb-0">👥 任務指派名單</h5>
+            </div>
+            <div class="card-body px-4 pb-4">
+                <hr class="mt-0 mb-3">
+                <div class="d-flex flex-column gap-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">主辦負責人</span>
+                        <span class="badge bg-dark px-2.5 py-1.5 rounded-pill fw-bold">👑 @Model.OwnerUserName</span>
+                    </div>
+                    <div>
+                        <span class="text-muted small d-block mb-2">協辦人員</span>
+                        @if (!Model.AssistUserNames.Any())
+                        {
+                            <span class="text-muted small">無協辦人員</span>
+                        }
+                        else
+                        {
+                            <div class="d-flex flex-wrap gap-1.5">
+                                @foreach (var name in Model.AssistUserNames)
+                                {
+                                    <span class="badge bg-light text-dark border px-2 py-1 rounded-3 small">🤝 @name</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Review Logs (審查紀錄) -->
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-transparent border-0 pt-4 px-4">
+                <h5 class="card-title fw-bold text-dark mb-0">🛡️ 歷史審查紀錄表</h5>
+            </div>
+            <div class="card-body px-4 pb-4">
+                <hr class="mt-0 mb-3">
+                @if (!reviews.Any())
+                {
+                    <p class="text-muted small mb-0">此任務目前尚無審查紀錄。</p>
+                }
+                else
+                {
+                    <div class="d-flex flex-column gap-3">
+                        @foreach (var r in reviews)
+                        {
+                            <div class="border rounded-4 p-3 bg-light">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="fw-bold small">👤 審查人：@r.ReviewerUserName</span>
+                                    @if (r.ReviewResult == "Approved")
+                                    {
+                                        <span class="badge bg-success small">通過</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger small">退回</span>
+                                    }
+                                </div>
+                                <p class="text-dark small mb-1" style="white-space: pre-wrap;">💬 @r.ReviewComment</p>
+                                <div class="text-end text-muted x-small">@r.ReviewedAt.ToString("yyyy-MM-dd HH:mm")</div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Enforce word count limit of 30 characters in Submit to Review form
+        const summaryTextarea = document.getElementById('completeSummaryText');
+        const submitBtn = document.getElementById('btnSubmitReview');
+        const tipDiv = document.getElementById('charCountTip');
+
+        if (summaryTextarea) {
+            summaryTextarea.addEventListener('input', () => {
+                const len = summaryTextarea.value.trim().length;
+                tipDiv.innerText = `目前字數：${len} 字` + (len >= 30 ? ' (已達標準)' : ` (還差 ${30 - len} 字)`);
+                
+                if (len >= 30) {
+                    tipDiv.classList.remove('text-danger');
+                    tipDiv.classList.add('text-success');
+                    submitBtn.disabled = false;
+                } else {
+                    tipDiv.classList.remove('text-success');
+                    tipDiv.classList.add('text-danger');
+                    submitBtn.disabled = true;
+                }
+            });
+        }
+    </script>
+}
+
+<style>
+    .x-small {
+        font-size: 0.75rem;
+    }
+</style>

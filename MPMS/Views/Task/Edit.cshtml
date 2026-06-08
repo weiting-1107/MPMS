@@ -1,0 +1,215 @@
+@model MPMS.Models.TaskModel
+@{
+    var phase = ViewBag.Phase as MPMS.Models.ProjectPhase ?? new MPMS.Models.ProjectPhase();
+    var project = ViewBag.Project as MPMS.Models.Project ?? new MPMS.Models.Project();
+    var users = ViewBag.Users as IEnumerable<MPMS.Models.User> ?? new List<MPMS.Models.User>();
+    ViewData["Title"] = "編輯任務";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-transparent border-0 pt-4 px-4">
+                <span class="badge bg-light text-dark border px-2.5 py-1.5 rounded-pill mb-2">專案：@project.ProjectName</span>
+                <h4 class="card-title fw-bold text-dark mb-1">編輯任務</h4>
+                <p class="text-muted small mb-0">修改任務「@Model.TaskTitle」基本資料、負責人或協辦名單</p>
+            </div>
+            
+            <div class="card-body px-4 pb-4">
+                <hr class="mt-0 mb-4">
+                
+                <form asp-action="Edit" method="post" id="taskForm">
+                    @if (!ViewData.ModelState.IsValid)
+                    {
+                        <div class="alert alert-danger rounded-3" role="alert">
+                            <div asp-validation-summary="All"></div>
+                        </div>
+                    }
+
+                    <input type="hidden" asp-for="TaskId" />
+                    <input type="hidden" asp-for="PhaseId" />
+                    <input type="hidden" asp-for="ProjectId" />
+                    <input type="hidden" asp-for="RowVersion" />
+
+                    <div class="row g-3">
+                        <!-- Task Title -->
+                        <div class="col-12 mb-3">
+                            <label asp-for="TaskTitle" class="form-label fw-semibold">任務名稱</label>
+                            <input asp-for="TaskTitle" class="form-control rounded-3" placeholder="例如: 撰寫系統架構設計文件與類別圖" required />
+                            <span asp-validation-for="TaskTitle" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Owner User -->
+                        <div class="col-md-6 mb-3">
+                            <label asp-for="OwnerUserId" class="form-label fw-semibold">主辦負責人 (單選)</label>
+                            <select asp-for="OwnerUserId" class="form-select rounded-3" id="ownerSelect" required onchange="handleOwnerChange(this.value)">
+                                @foreach (var u in users)
+                                {
+                                    <option value="@u.UserId">@u.UserName (@u.Account) - @u.RoleName</option>
+                                }
+                            </select>
+                            <span asp-validation-for="OwnerUserId" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Reviewer User -->
+                        <div class="col-md-6 mb-3">
+                            <label asp-for="ReviewerUserId" class="form-label fw-semibold">同儕審查人 (單選)</label>
+                            <select asp-for="ReviewerUserId" class="form-select rounded-3" id="reviewerSelect">
+                                <option value="">-- 未指定 --</option>
+                                @foreach (var u in users)
+                                {
+                                    <option value="@u.UserId">@u.UserName (@u.Account) - @u.RoleName</option>
+                                }
+                            </select>
+                            <span asp-validation-for="ReviewerUserId" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Backup Reviewer User -->
+                        <div class="col-md-6 mb-3">
+                            <label asp-for="BackupReviewerUserId" class="form-label fw-semibold">備份審查人 (單選)</label>
+                            <select asp-for="BackupReviewerUserId" class="form-select rounded-3" id="backupReviewerSelect">
+                                <option value="">-- 未指定 --</option>
+                                @foreach (var u in users)
+                                {
+                                    <option value="@u.UserId">@u.UserName (@u.Account) - @u.RoleName</option>
+                                }
+                            </select>
+                            <span asp-validation-for="BackupReviewerUserId" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Planned Start Date -->
+                        <div class="col-md-6 mb-3">
+                            <label asp-for="PlannedStartDate" class="form-label fw-semibold">計畫開始日</label>
+                            <input asp-for="PlannedStartDate" type="date" class="form-control rounded-3" required />
+                            <span asp-validation-for="PlannedStartDate" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Due Date -->
+                        <div class="col-md-6 mb-3">
+                            <label asp-for="DueDate" class="form-label fw-semibold">截止日期</label>
+                            <input asp-for="DueDate" type="date" class="form-control rounded-3" required />
+                            <span asp-validation-for="DueDate" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Is Milestone Checkbox -->
+                        <div class="col-md-6 mb-3 d-flex align-items-center pt-4">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" asp-for="IsMilestone" id="isMilestoneSwitch" />
+                                <label class="form-check-label fw-semibold" for="isMilestoneSwitch">標記為「里程碑任務」</label>
+                            </div>
+                        </div>
+
+                        <!-- Priority -->
+                        <div class="col-md-6 mb-3">
+                            <label asp-for="Priority" class="form-label fw-semibold">優先度</label>
+                            <select asp-for="Priority" class="form-select rounded-3" required>
+                                <option value="Low">低 (Low)</option>
+                                <option value="Normal">中 (Normal)</option>
+                                <option value="High">高 (High)</option>
+                            </select>
+                            <span asp-validation-for="Priority" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Task Description -->
+                        <div class="col-12 mb-3">
+                            <label asp-for="TaskDesc" class="form-label fw-semibold">任務說明內容</label>
+                            <textarea asp-for="TaskDesc" class="form-control rounded-3" rows="3" placeholder="請詳細說明此任務的完成標準、預計產出或協作方式...">@Model.TaskDesc</textarea>
+                            <span asp-validation-for="TaskDesc" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Cross Phase Warning & Reason -->
+                        @if (ViewBag.ShowCrossPhaseWarning == true)
+                        {
+                            <div class="col-12 mb-3">
+                                <div class="alert alert-warning rounded-3 border-start border-warning border-4">
+                                    <h6 class="fw-bold text-dark mb-1">⚠️ 計畫日期超出階段起訖範圍警告</h6>
+                                    <p class="small mb-2 text-muted">此任務設定的時程已超出所屬專案階段「@phase.PhaseName」的起訖區間 (@phase.StartDate.ToString("yyyy-MM-dd") ~ @phase.EndDate.ToString("yyyy-MM-dd"))，但仍在專案區間內。</p>
+                                    <label class="form-label fw-semibold text-dark">跨階段原因說明 <span class="text-danger">*</span></label>
+                                    <input type="text" name="CrossPhaseReason" class="form-control rounded-3" placeholder="請在此輸入跨階段原因說明..." required />
+                                </div>
+                            </div>
+                        }
+
+                        <!-- Predecessors (Checkboxes) -->
+                        <div class="col-12 mb-3">
+                            <label class="form-label fw-semibold d-block">前置相依任務 (可多選，選擇需要先完成的任務)</label>
+                            <div class="border rounded-4 p-3 bg-light overflow-auto" style="max-height: 180px;">
+                                <div class="row g-2">
+                                    @if (ViewBag.ProjectTasks != null && (ViewBag.ProjectTasks as IEnumerable<MPMS.Models.TaskModel>).Any())
+                                    {
+                                        foreach (var t in (ViewBag.ProjectTasks as IEnumerable<MPMS.Models.TaskModel>))
+                                        {
+                                            <div class="col-md-6">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" name="selectedPredecessors" value="@t.TaskId" id="pred_chk_@t.TaskId" @(Model.PredecessorTaskIds.Contains(t.TaskId) ? "checked" : "") />
+                                                    <label class="form-check-label" for="pred_chk_@t.TaskId">
+                                                        @t.TaskTitle
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <div class="col-12 text-muted small py-2 text-center">查無其他專案任務可供相依設定。</div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Assistants (Checkboxes) -->
+                        <div class="col-12 mb-3">
+                            <label class="form-label fw-semibold d-block">協辦人員 (可多選，主辦負責人不可重複勾選)</label>
+                            <div class="border rounded-4 p-3 bg-light overflow-auto" style="max-height: 180px;">
+                                <div class="row g-2">
+                                    @foreach (var u in users)
+                                    {
+                                        <div class="col-md-6 assistant-item" id="assistant_item_@u.UserId">
+                                            <div class="form-check">
+                                                <input class="form-check-input assist-checkbox" type="checkbox" name="selectedAssistants" value="@u.UserId" id="assist_chk_@u.UserId" @(Model.AssistUserIds.Contains(u.UserId) ? "checked" : "") />
+                                                <label class="form-check-label" for="assist_chk_@u.UserId">
+                                                    @u.UserName (@u.RoleName)
+                                                </label>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <a href="/Project/Phases?projectId=@project.ProjectId" class="btn btn-outline-secondary rounded-3 px-4 py-2">取消</a>
+                        <button type="submit" class="btn btn-primary rounded-3 px-4 py-2">儲存修改</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function handleOwnerChange(ownerId) {
+            const checkboxes = document.querySelectorAll('.assist-checkbox');
+            checkboxes.forEach(chk => {
+                chk.disabled = false;
+                chk.closest('.form-check').style.opacity = '1';
+            });
+
+            if (ownerId) {
+                const targetChk = document.getElementById('assist_chk_' + ownerId);
+                if (targetChk) {
+                    targetChk.checked = false;
+                    targetChk.disabled = true;
+                    targetChk.closest('.form-check').style.opacity = '0.5';
+                }
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const currentOwner = document.getElementById('ownerSelect').value;
+            handleOwnerChange(currentOwner);
+        });
+    </script>
+}

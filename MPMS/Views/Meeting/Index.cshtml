@@ -1,0 +1,907 @@
+@model MPMS.Models.Meeting
+@{
+    ViewData["Title"] = $"週會控制台 ({Model.MeetingWeek})";
+    var startOfWeek = (DateTime)ViewBag.StartOfWeek;
+    var endOfWeek = (DateTime)ViewBag.EndOfWeek;
+
+    var tasksDue = (IEnumerable<MPMS.Models.TaskModel>)ViewBag.TasksDue;
+    var tasksUpdated = (IEnumerable<MPMS.Models.TaskModel>)ViewBag.TasksUpdated;
+    var tasksBlocked = (IEnumerable<MPMS.Models.TaskModel>)ViewBag.TasksBlocked;
+    var tasksReviewing = (IEnumerable<MPMS.Models.TaskModel>)ViewBag.TasksReviewing;
+    var tasksCompleted = (IEnumerable<MPMS.Models.TaskModel>)ViewBag.TasksCompleted;
+    var attachments = (IEnumerable<MPMS.Models.TaskAttachment>)ViewBag.Attachments;
+    var actionItems = (IEnumerable<MPMS.Models.MeetingAction>)ViewBag.ActionItems;
+}
+
+<!-- Header -->
+<div class="row mb-4 align-items-center">
+    <div class="col-md">
+        <div class="d-flex align-items-center mb-1">
+            <a asp-action="ListMeetings" class="btn btn-sm btn-outline-secondary me-3 rounded-circle px-2 py-1">
+                ⬅️
+            </a>
+            <h2 class="fw-bold text-dark mb-0">
+                🖥️ 週會控制台 - @Model.MeetingWeek
+            </h2>
+        </div>
+        <p class="text-muted mb-0">
+            會議日期：<span class="fw-semibold">@Model.MeetingDate.ToString("yyyy-MM-dd (dddd)")</span> &bull; 
+            區間：<span class="fw-semibold">@startOfWeek.ToString("yyyy-MM-dd")</span> ~ <span class="fw-semibold">@endOfWeek.ToString("yyyy-MM-dd")</span> &bull;
+            主持人：<span class="badge bg-secondary">@Model.HostUserName</span> &bull;
+            範圍：
+            @if (Model.ProjectId.HasValue)
+            {
+                <span class="badge bg-primary">專案：@Model.ProjectName</span>
+            }
+            else
+            {
+                <span class="badge bg-indigo text-light" style="background-color:#4f46e5;">📢 全系統專案</span>
+            }
+        </p>
+    </div>
+    @if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
+    {
+        <div class="col-md-auto mt-3 mt-md-0">
+            @if (ViewBag.SnapshotExists == true)
+            {
+                <button type="button" class="btn btn-warning fw-semibold shadow-sm me-2" onclick="openRevisionModal()">
+                    📦 建立修正版快照 (v@(ViewBag.SnapshotVersion + 1))
+                </button>
+            }
+            else
+            {
+                <form asp-action="SealSnapshot" method="post" style="display: inline;">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="meetingId" value="@Model.MeetingId" />
+                    <button type="submit" class="btn btn-warning fw-semibold shadow-sm me-2">
+                        📦 封存本週快照
+                    </button>
+                </form>
+            }
+        </div>
+    }
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show border-0 shadow-sm mb-4" role="alert">
+        🎉 @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show border-0 shadow-sm mb-4" role="alert">
+        ⚠️ @TempData["ErrorMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<!-- SignalR Status Indicator -->
+<div class="d-flex align-items-center mb-3">
+    <span class="badge bg-success-soft text-success d-flex align-items-center py-2 px-3 rounded-pill" id="signalrStatus">
+        <span class="spinner-grow spinner-grow-sm me-2 text-success" role="status" style="width: 10px; height: 10px;"></span>
+        即時同步已啟動 (SignalR Connected)
+    </span>
+</div>
+
+<div class="row">
+    <!-- Left Column: Focal Lists & Tab Dashboard -->
+    <div class="col-lg-8 mb-4">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-bottom-0 pt-3">
+                <ul class="nav nav-pills card-header-pills" id="meetingTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="due-tab" data-bs-toggle="pill" data-bs-target="#due" type="button" role="tab" aria-controls="due" aria-selected="true">
+                            📅 本週截止 <span class="badge bg-danger ms-1">@tasksDue.Count()</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="updated-tab" data-bs-toggle="pill" data-bs-target="#updated" type="button" role="tab" aria-controls="updated" aria-selected="false">
+                            🔄 當週更新 <span class="badge bg-indigo ms-1 text-light" style="background-color: #6366f1;">@tasksUpdated.Count()</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="blocked-tab" data-bs-toggle="pill" data-bs-target="#blocked" type="button" role="tab" aria-controls="blocked" aria-selected="false">
+                            🚧 卡關任務 <span class="badge bg-warning text-dark ms-1">@tasksBlocked.Count()</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="reviewing-tab" data-bs-toggle="pill" data-bs-target="#reviewing" type="button" role="tab" aria-controls="reviewing" aria-selected="false">
+                            🔍 審查中 <span class="badge bg-info text-dark ms-1">@tasksReviewing.Count()</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="completed-tab" data-bs-toggle="pill" data-bs-target="#completed" type="button" role="tab" aria-controls="completed" aria-selected="false">
+                            ✅ 本週完成 <span class="badge bg-success ms-1">@tasksCompleted.Count()</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="wall-tab" data-bs-toggle="pill" data-bs-target="#wall" type="button" role="tab" aria-controls="wall" aria-selected="false">
+                            🖼️ 附件牆 <span class="badge bg-secondary ms-1">@attachments.Count()</span>
+                        </button>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="card-body">
+                <div class="tab-content" id="meetingTabsContent">
+                    
+                    <!-- Tab 1: 本週截止 -->
+                    <div class="tab-pane fade show active" id="due" role="tabpanel" aria-labelledby="due-tab">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr class="text-muted fs-7 text-uppercase">
+                                        <th>任務 / 專案 / 專案階段</th>
+                                        <th>負責人</th>
+                                        <th>截止日</th>
+                                        <th>狀態</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!tasksDue.Any())
+                                    {
+                                        <tr><td colspan="5" class="text-center py-4 text-muted">本週無截止任務。</td></tr>
+                                    }
+                                    else
+                                    {
+                                        foreach (var t in tasksDue)
+                                        {
+                                            <partial name="_TaskRow" model="t" />
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Tab 2: 當週更新 -->
+                    <div class="tab-pane fade" id="updated" role="tabpanel" aria-labelledby="updated-tab">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr class="text-muted fs-7 text-uppercase">
+                                        <th>任務 / 專案 / 專案階段</th>
+                                        <th>負責人</th>
+                                        <th>截止日</th>
+                                        <th>狀態</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!tasksUpdated.Any())
+                                    {
+                                        <tr><td colspan="5" class="text-center py-4 text-muted">當週無狀態更新。</td></tr>
+                                    }
+                                    else
+                                    {
+                                        foreach (var t in tasksUpdated)
+                                        {
+                                            <partial name="_TaskRow" model="t" />
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Tab 3: 卡關任務 -->
+                    <div class="tab-pane fade" id="blocked" role="tabpanel" aria-labelledby="blocked-tab">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr class="text-muted fs-7 text-uppercase">
+                                        <th>任務 / 專案 / 專案階段</th>
+                                        <th>負責人</th>
+                                        <th>卡關原因</th>
+                                        <th>截止日</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!tasksBlocked.Any())
+                                    {
+                                        <tr><td colspan="5" class="text-center py-4 text-muted">目前沒有卡關任務。</td></tr>
+                                    }
+                                    else
+                                    {
+                                        foreach (var t in tasksBlocked)
+                                        {
+                                            <tr>
+                                                <td>
+                                                    <a href="/Task/Details/@t.TaskId" class="fw-bold text-dark text-decoration-none">@t.TaskTitle</a>
+                                                    <div class="text-muted" style="font-size: 0.8rem;">
+                                                        📂 @t.ProjectName &bull; 🏷️ @t.PhaseName
+                                                    </div>
+                                                </td>
+                                                <td>@t.OwnerUserName</td>
+                                                <td>
+                                                    <span class="text-danger fw-semibold">@t.BlockedReason</span>
+                                                </td>
+                                                <td>@t.DueDate.ToString("yyyy-MM-dd")</td>
+                                                <td>
+                                                    <a href="/Task/Details/@t.TaskId" class="btn btn-xs btn-outline-secondary rounded-pill">查看</a>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Tab 4: 審查中 -->
+                    <div class="tab-pane fade" id="reviewing" role="tabpanel" aria-labelledby="reviewing-tab">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr class="text-muted fs-7 text-uppercase">
+                                        <th>任務 / 專案 / 專案階段</th>
+                                        <th>負責人</th>
+                                        <th>完工摘要</th>
+                                        <th>截止日</th>
+                                        <th class="text-end">動作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!tasksReviewing.Any())
+                                    {
+                                        <tr><td colspan="5" class="text-center py-4 text-muted">目前沒有審查中任務。</td></tr>
+                                    }
+                                    else
+                                    {
+                                        foreach (var t in tasksReviewing)
+                                        {
+                                            <tr>
+                                                <td>
+                                                    <a href="/Task/Details/@t.TaskId" class="fw-bold text-dark text-decoration-none">@t.TaskTitle</a>
+                                                    <div class="text-muted" style="font-size: 0.8rem;">
+                                                        📂 @t.ProjectName &bull; 🏷️ @t.PhaseName
+                                                    </div>
+                                                </td>
+                                                <td>@t.OwnerUserName</td>
+                                                <td>
+                                                    <div class="text-truncate text-muted" style="max-width: 250px;" title="@t.CompleteSummary">
+                                                        @t.CompleteSummary
+                                                    </div>
+                                                </td>
+                                                <td>@t.DueDate.ToString("yyyy-MM-dd")</td>
+                                                <td class="text-end">
+                                                    @if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
+                                                    {
+                                                        <button type="button" class="btn btn-sm btn-danger rounded-pill px-3" onclick="openReturnModal(@t.TaskId, '@t.TaskTitle', '@(t.RowVersion != null ? Convert.ToBase64String(t.RowVersion) : "")')">
+                                                            🚫 現場退回
+                                                        </button>
+                                                    }
+                                                    <a href="/Task/Details/@t.TaskId" class="btn btn-sm btn-outline-primary rounded-pill px-3 ms-1">審查</a>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Tab 5: 本週完成 -->
+                    <div class="tab-pane fade" id="completed" role="tabpanel" aria-labelledby="completed-tab">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr class="text-muted fs-7 text-uppercase">
+                                        <th>任務 / 專案 / 專案階段</th>
+                                        <th>負責人</th>
+                                        <th>完工摘要</th>
+                                        <th>完成時間</th>
+                                        <th class="text-end">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!tasksCompleted.Any())
+                                    {
+                                        <tr><td colspan="5" class="text-center py-4 text-muted">本週無完成任務。</td></tr>
+                                    }
+                                    else
+                                    {
+                                        foreach (var t in tasksCompleted)
+                                        {
+                                            <tr>
+                                                <td>
+                                                    <a href="/Task/Details/@t.TaskId" class="fw-bold text-dark text-decoration-none">@t.TaskTitle</a>
+                                                    <div class="text-muted" style="font-size: 0.8rem;">
+                                                        📂 @t.ProjectName &bull; 🏷️ @t.PhaseName
+                                                    </div>
+                                                </td>
+                                                <td>@t.OwnerUserName</td>
+                                                <td>
+                                                    <div class="text-truncate text-muted" style="max-width: 250px;" title="@t.CompleteSummary">
+                                                        @t.CompleteSummary
+                                                    </div>
+                                                </td>
+                                                <td class="text-muted">
+                                                    @t.DoneAt?.ToString("yyyy-MM-dd HH:mm")
+                                                </td>
+                                                <td class="text-end">
+                                                    @if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
+                                                    {
+                                                        <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3" onclick="openReturnModal(@t.TaskId, '@t.TaskTitle', '@(t.RowVersion != null ? Convert.ToBase64String(t.RowVersion) : "")')">
+                                                            🚫 現場退回
+                                                        </button>
+                                                    }
+                                                    <a href="/Task/Details/@t.TaskId" class="btn btn-sm btn-outline-secondary rounded-pill px-3 ms-1">詳情</a>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Tab 6: 附件牆 -->
+                    <div class="tab-pane fade" id="wall" role="tabpanel" aria-labelledby="wall-tab">
+                        @if (!attachments.Any())
+                        {
+                            <div class="text-center py-5 text-muted">
+                                <div class="fs-1 mb-2">🖼️</div>
+                                本週無任何新上傳的有效附件。
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="row g-3">
+                                @foreach (var att in attachments)
+                                {
+                                    <div class="col-md-6 col-xxl-4">
+                                        <div class="card h-100 border border-light shadow-sm">
+                                            <div class="card-body d-flex flex-column">
+                                                <div class="d-flex align-items-center mb-3">
+                                                    <div class="file-icon-box bg-light text-primary rounded p-2 me-3 fs-3 d-flex align-items-center justify-content-center" style="width:48px; height:48px;">
+                                                        @if (new[] { ".png", ".jpg", ".jpeg", ".gif" }.Contains(att.FileExt))
+                                                        {
+                                                            <span>🖼️</span>
+                                                        }
+                                                        else if (new[] { ".pdf" }.Contains(att.FileExt))
+                                                        {
+                                                            <span>📄</span>
+                                                        }
+                                                        else if (new[] { ".zip", ".rar" }.Contains(att.FileExt))
+                                                        {
+                                                            <span>📦</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span>📝</span>
+                                                        }
+                                                    </div>
+                                                    <div class="overflow-hidden">
+                                                        <a href="/uploads/@att.StoredFileName" download="@att.OriginalFileName" class="fw-bold text-dark text-decoration-none text-truncate d-block" title="@att.OriginalFileName">
+                                                            @att.OriginalFileName
+                                                        </a>
+                                                        <small class="text-muted d-block">@((att.FileSizeBytes / 1024.0).ToString("N1")) KB &bull; @att.FileExt.ToUpper()</small>
+                                                    </div>
+                                                </div>
+                                                <p class="text-muted flex-grow-1" style="font-size: 0.9rem; line-height: 1.5;">
+                                                    <strong>摘要：</strong>@att.SummaryText
+                                                </p>
+                                                <hr class="my-2 border-light">
+                                                <div class="d-flex justify-content-between align-items-center mt-auto">
+                                                    <div>
+                                                        <small class="text-muted d-block">👤 上傳人：@att.UploadUserName</small>
+                                                        <small class="text-muted d-block">🕒 時間：@att.UploadedAt.ToString("MM-dd HH:mm")</small>
+                                                    </div>
+                                                    <a href="/Task/Details/@att.TaskId" class="btn btn-sm btn-light rounded-pill px-3">查看任務</a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Meeting Notes Panel -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold text-dark mb-0">📝 週會會議記錄</h5>
+                    @if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
+                    {
+                        <button type="button" id="btnSaveNotes" class="btn btn-sm btn-indigo text-light rounded-pill px-3" style="background-color:#4f46e5;">
+                            💾 儲存會議記錄
+                        </button>
+                    }
+                </div>
+                <div class="mb-0">
+                    <textarea class="form-control" id="meetingNotesTextarea" rows="6" placeholder="請在此輸入本次週會記錄大綱、討論內容或決議事項..." @(User.IsInRole("ADMIN") || User.IsInRole("PM") ? "" : "disabled")>@Model.MeetingNote</textarea>
+                </div>
+                <div id="notesSaveStatus" class="text-success mt-2 fs-7" style="display:none;">
+                    &check; 會議記錄已成功儲存！
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Temporary Action Items -->
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm mb-4 h-100">
+            <div class="card-header bg-white border-bottom-0 pt-3 d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold text-dark mb-0">📋 現場臨時派工 (Action Items)</h5>
+                @if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
+                {
+                    <button type="button" class="btn btn-sm btn-primary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#addActionItemModal">
+                        ➕ 派工
+                    </button>
+                }
+            </div>
+            <div class="card-body">
+                <div class="action-items-list">
+                    @if (!actionItems.Any())
+                    {
+                        <div class="text-center py-5 text-muted">
+                            <div class="fs-2 mb-2">🤷</div>
+                            本次會議無臨時派工項目。
+                        </div>
+                    }
+                    else
+                    {
+                        foreach (var act in actionItems)
+                        {
+                            <div class="action-item-card border border-light rounded p-3 mb-3 shadow-sm bg-white">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h6 class="fw-bold text-dark mb-0">@act.ActionTitle</h6>
+                                    @if (act.TaskId.HasValue)
+                                    {
+                                        <span class="badge bg-success-soft text-success">已轉正式</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning-soft text-warning">臨時派工</span>
+                                    }
+                                </div>
+                                <p class="text-muted mb-2 fs-7">
+                                    @act.ActionNote
+                                </p>
+                                <div class="d-flex justify-content-between align-items-center border-top border-light pt-2" style="font-size:0.8rem;">
+                                    <div>
+                                        <div class="text-dark">👤 負責人：<strong>@act.OwnerUserName</strong></div>
+                                        <div class="text-danger mt-1">🕒 截止日：<strong>@act.DueDate.ToString("yyyy-MM-dd")</strong></div>
+                                    </div>
+                                    @if (!act.TaskId.HasValue)
+                                    {
+                                        @if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
+                                        {
+                                            <button type="button" class="btn btn-xs btn-outline-primary rounded-pill" onclick="openConvertModal(@act.ActionId, '@act.ActionTitle')">
+                                                🛠️ 轉正式任務
+                                            </button>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <a href="/Task/Details/@act.TaskId" class="btn btn-xs btn-outline-secondary rounded-pill">
+                                            🔍 查看任務
+                                        </a>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Add Action Item -->
+@if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
+{
+    <div class="modal fade" id="addActionItemModal" tabindex="-1" aria-labelledby="addActionItemModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+                <div class="modal-header border-bottom-0 pb-0">
+                    <h5 class="modal-title fw-bold" id="addActionItemModalLabel">➕ 新增臨時派工 (Action Item)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form asp-action="AddActionItem" method="post">
+                    <div class="modal-body py-4">
+                        <input type="hidden" name="MeetingId" value="@Model.MeetingId" />
+
+                        <div class="mb-3">
+                            <label for="ActionTitle" class="form-label fw-semibold">臨時任務名稱</label>
+                            <input type="text" class="form-control" id="ActionTitle" name="ActionTitle" placeholder="例如：確認伺服器憑證更新" required />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="OwnerUserId" class="form-label fw-semibold">指派負責人</label>
+                            <select class="form-select" id="OwnerUserId" name="OwnerUserId" required>
+                                <option value="">-- 請選擇負責人員 --</option>
+                                @if (ViewBag.Users != null)
+                                {
+                                    foreach (var u in ViewBag.Users)
+                                    {
+                                        <option value="@u.UserId">@u.UserName (@u.RoleName)</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="DueDate" class="form-label fw-semibold">截止日期</label>
+                            <input type="date" class="form-control" id="DueDate" name="DueDate" value="@DateTime.Today.AddDays(7).ToString("yyyy-MM-dd")" required />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="ActionNote" class="form-label fw-semibold">工作說明 / 備註</label>
+                            <textarea class="form-control" id="ActionNote" name="ActionNote" rows="3" placeholder="簡述本次指派的工作細節或備註資訊..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-top-0 pt-0">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-primary px-4">指派</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Meeting Return Task (Reject) -->
+    <div class="modal fade" id="returnTaskModal" tabindex="-1" aria-labelledby="returnTaskModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+                <div class="modal-header border-bottom-0 pb-0">
+                    <h5 class="modal-title fw-bold text-danger" id="returnTaskModalLabel">🚫 現場退回任務</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form asp-action="MeetingReturnTask" method="post">
+                    <div class="modal-body py-4">
+                        <input type="hidden" name="MeetingId" value="@Model.MeetingId" />
+                        <input type="hidden" id="returnTaskId" name="TaskId" value="" />
+                        <input type="hidden" id="returnRowVersionStr" name="rowVersionStr" value="" />
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">準備退回之任務</label>
+                            <input type="text" class="form-control-plaintext fw-bold" id="returnTaskTitle" value="" readonly />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="returnReason" class="form-label fw-semibold">退回原因 (必填)</label>
+                            <textarea class="form-control" id="returnReason" name="reason" rows="4" placeholder="請輸入現場退回的原因（例如：附件不符、缺少測試紀錄、摘要內容不符等）..." required></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-top-0 pt-0">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-danger px-4">現場退回</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Convert Action to Task -->
+    <div class="modal fade" id="convertTaskModal" tabindex="-1" aria-labelledby="convertTaskModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+                <div class="modal-header border-bottom-0 pb-0">
+                    <h5 class="modal-title fw-bold" id="convertTaskModalLabel">🛠️ 轉換為正式專案任務</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form asp-action="ConvertActionToTask" method="post">
+                    <div class="modal-body py-4">
+                        <input type="hidden" name="MeetingId" value="@Model.MeetingId" />
+                        <input type="hidden" id="convertActionId" name="ActionId" value="" />
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">臨時任務名稱</label>
+                            <input type="text" class="form-control border-0 bg-light fw-bold" id="convertActionTitle" value="" readonly />
+                        </div>
+
+                        @if (Model.ProjectId.HasValue)
+                        {
+                            <input type="hidden" id="convertProjectId" value="@Model.ProjectId.Value" />
+                            <div class="mb-3">
+                                <label for="convertPhaseId" class="form-label fw-semibold">關聯專案階段</label>
+                                <select class="form-select" id="convertPhaseId" name="phaseId" required>
+                                    <option value="">-- 請選擇專案階段 --</option>
+                                    @if (ViewBag.Phases != null)
+                                    {
+                                        foreach (var p in ViewBag.Phases)
+                                        {
+                                            <option value="@p.PhaseId">@p.PhaseName (時程: @(p.StartDate?.ToString("yyyy-MM-dd") ?? "--") ~ @(p.EndDate?.ToString("yyyy-MM-dd") ?? "--"))</option>
+                                        }
+                                    }
+                                </select>
+                            </div>
+                        }
+                        else
+                        {
+                            <!-- Global meeting: Select project first, then phases will be loaded via AJAX -->
+                            <div class="mb-3">
+                                <label for="convertProjectId" class="form-label fw-semibold">選擇專案</label>
+                                <select class="form-select" id="convertProjectId" onchange="loadPhases(this.value)" required>
+                                    <option value="">-- 請選擇專案 --</option>
+                                    @if (ViewBag.AllProjects != null)
+                                    {
+                                        foreach (var p in ViewBag.AllProjects)
+                                        {
+                                            <option value="@p.ProjectId">@p.ProjectName (@p.ProjectCode)</option>
+                                        }
+                                    }
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="convertPhaseId" class="form-label fw-semibold">關聯專案階段</label>
+                                <select class="form-select" id="convertPhaseId" name="phaseId" required disabled>
+                                    <option value="">-- 請先選擇專案 --</option>
+                                </select>
+                            </div>
+                        }
+
+                        <div class="mb-3">
+                            <label for="Priority" class="form-label fw-semibold">優先等級</label>
+                            <select class="form-select" name="Priority" required>
+                                <option value="Normal">Normal</option>
+                                <option value="Low">Low</option>
+                                <option value="High">High</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-top-0 pt-0">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-primary px-4">轉換正式任務</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <!-- Modal: Seal Snapshot Revision (SNP-002) -->
+    <div class="modal fade" id="revisionModal" tabindex="-1" aria-labelledby="revisionModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+                <div class="modal-header border-bottom-0 pb-0">
+                    <h5 class="modal-title fw-bold text-warning" id="revisionModalLabel">📦 建立修正版週快照 (v@(ViewBag.SnapshotVersion + 1))</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form asp-action="SealSnapshot" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="modal-body py-4">
+                        <input type="hidden" name="meetingId" value="@Model.MeetingId" />
+
+                        <div class="alert alert-warning border-0 fs-7 py-2" role="alert">
+                            ⚠️ 此週會已建立過快照。建立新的修正版本，將會覆寫趨勢圖當週最新數據，但系統將會保留您的歷史版本紀錄。
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="revisionReasonInput" class="form-label fw-semibold">修正原因 (必填)</label>
+                            <textarea class="form-control" id="revisionReasonInput" name="revisionReason" rows="4" placeholder="請輸入本次修正快照的原因（例如：PM 於週會後調整了專案進度、修正里程碑狀態等）..." required></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-top-0 pt-0">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-warning px-4 text-dark fw-bold">確認建立修正版</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
+@section Scripts {
+    <!-- SignalR client library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js" integrity="sha512-7SrC1l0/1f4pEqo67+Z0xP+B66fLnd9jH5jW/s265/2vN2Z+Jb0Y3V7M8hT58tZ1E4w9bFk7rT9PzW67tO5b==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    
+    <script>
+        // ------------------ Tab selection preservation ------------------
+        $(document).ready(function() {
+            var activeTabKey = 'activeTab_' + @Model.MeetingId;
+            var activeTab = localStorage.getItem(activeTabKey);
+            if (activeTab) {
+                var tabTrigger = new bootstrap.Tab(document.querySelector(activeTab));
+                tabTrigger.show();
+            }
+
+            // Listen to tab show events and save to localStorage
+            var tabElList = [].slice.call(document.querySelectorAll('button[data-bs-toggle="pill"]'))
+            tabElList.forEach(function (tabEl) {
+                tabEl.addEventListener('shown.bs.tab', function (event) {
+                    var targetId = '#' + event.target.id;
+                    localStorage.setItem(activeTabKey, targetId);
+                })
+            });
+        });
+
+        // ------------------ Meeting Note Auto-saving/Saving ------------------
+        $('#btnSaveNotes').click(function() {
+            var btn = $(this);
+            var noteText = $('#meetingNotesTextarea').val();
+            btn.prop('disabled', true).text('⏳ 正在儲存...');
+
+            $.post('/Meeting/UpdateMeetingNote', {
+                meetingId: @Model.MeetingId,
+                meetingNote: noteText
+            })
+            .done(function(response) {
+                if (response.success) {
+                    $('#notesSaveStatus').fadeIn().delay(3000).fadeOut();
+                } else {
+                    alert('儲存失敗：' + response.message);
+                }
+            })
+            .fail(function() {
+                alert('網路傳輸失敗，無法儲存會議記錄。');
+            })
+            .always(function() {
+                btn.prop('disabled', false).text('💾 儲存會議記錄');
+            });
+        });
+
+        // ------------------ Modal Helper Functions ------------------
+        function openReturnModal(taskId, taskTitle, rowVersionStr) {
+            $('#returnTaskId').val(taskId);
+            $('#returnTaskTitle').val(taskTitle);
+            $('#returnRowVersionStr').val(rowVersionStr);
+            var myModal = new bootstrap.Modal(document.getElementById('returnTaskModal'));
+            myModal.show();
+        }
+
+        function openConvertModal(actionId, actionTitle) {
+            $('#convertActionId').val(actionId);
+            $('#convertActionTitle').val(actionTitle);
+            var myModal = new bootstrap.Modal(document.getElementById('convertTaskModal'));
+            myModal.show();
+        }
+
+        function openRevisionModal() {
+            var myModal = new bootstrap.Modal(document.getElementById('revisionModal'));
+            myModal.show();
+        }
+
+        // ------------------ Load Phases via AJAX (Global Meeting View) ------------------
+        function loadPhases(projectId) {
+            var select = $('#convertPhaseId');
+            select.empty();
+
+            if (!projectId) {
+                select.append('<option value="">-- 請先選擇專案 --</option>');
+                select.prop('disabled', true);
+                return;
+            }
+
+            $.getJSON('/Meeting/GetPhases', { projectId: projectId })
+            .done(function(data) {
+                if (data && data.length > 0) {
+                    select.append('<option value="">-- 請選擇專案階段 --</option>');
+                    $.each(data, function(index, item) {
+                        select.append('<option value="' + item.phaseId + '">' + item.phaseName + '</option>');
+                    });
+                    select.prop('disabled', false);
+                } else {
+                    select.append('<option value="">⚠️ 此專案目前無階段，無法指派</option>');
+                    select.prop('disabled', true);
+                }
+            })
+            .fail(function() {
+                select.append('<option value="">⚠️ 載入專案階段失敗</option>');
+                select.prop('disabled', true);
+            });
+        }
+
+        // ------------------ SignalR Live Updates ------------------
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/meetingHub")
+            .withAutomaticReconnect()
+            .build();
+
+        connection.on("TaskUpdated", function (taskId) {
+            console.log("Task updated event received for taskId: " + taskId);
+            // Non-disruptive refresh: auto reload the page after a tiny delay
+            setTimeout(function() {
+                location.reload();
+            }, 1000);
+        });
+
+        connection.on("ActionItemsUpdated", function (meetingId) {
+            console.log("Action Items updated event received for meetingId: " + meetingId);
+            if (meetingId == @Model.MeetingId) {
+                setTimeout(function() {
+                    location.reload();
+                }, 1000);
+            }
+        });
+
+        connection.on("MeetingNoteUpdated", function (meetingId, noteText) {
+            console.log("Meeting Note updated event received for meetingId: " + meetingId);
+            if (meetingId == @Model.MeetingId && !$('#meetingNotesTextarea').is(':focus')) {
+                $('#meetingNotesTextarea').val(noteText);
+            }
+        });
+
+        connection.start().then(function () {
+            console.log("SignalR Connected to meetingHub!");
+            $('#signalrStatus').removeClass('bg-warning-soft text-warning').addClass('bg-success-soft text-success');
+            $('#signalrStatus').html('<span class="spinner-grow spinner-grow-sm me-2 text-success" role="status" style="width: 10px; height: 10px;"></span>即時同步已啟動 (SignalR Connected)');
+        }).catch(function (err) {
+            console.error("SignalR Connection error: ", err.toString());
+            $('#signalrStatus').removeClass('bg-success-soft text-success').addClass('bg-warning-soft text-warning');
+            $('#signalrStatus').html('⚠️ 即時同步斷開 (SignalR Disconnected)');
+        });
+    </script>
+}
+
+<style>
+    /* Premium style elements */
+    .bg-indigo {
+        background-color: #4f46e5 !important;
+    }
+    .text-indigo {
+        color: #4f46e5 !important;
+    }
+    .btn-indigo {
+        background-color: #4f46e5;
+        border-color: #4f46e5;
+    }
+    .btn-indigo:hover {
+        background-color: #4338ca;
+        border-color: #4338ca;
+    }
+    .btn-outline-indigo {
+        color: #4f46e5;
+        border-color: #4f46e5;
+    }
+    .btn-outline-indigo:hover {
+        background-color: #4f46e5;
+        color: white;
+    }
+    .bg-success-soft {
+        background-color: rgba(25, 135, 84, 0.1);
+        color: #198754;
+    }
+    .bg-danger-soft {
+        background-color: rgba(220, 53, 69, 0.1);
+        color: #dc3545;
+    }
+    .bg-warning-soft {
+        background-color: rgba(255, 193, 7, 0.15);
+        color: #b58100;
+    }
+    .bg-info-soft {
+        background-color: rgba(13, 202, 240, 0.15);
+        color: #087990;
+    }
+    .btn-xs {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+        border-radius: 0.2rem;
+    }
+    .nav-pills .nav-link {
+        color: #475569;
+        font-weight: 500;
+        border-radius: 20px;
+        padding: 8px 16px;
+    }
+    .nav-pills .nav-link.active {
+        background-color: #4f46e5;
+        color: white;
+    }
+    .action-item-card {
+        border-left: 4px solid #6366f1 !important;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .action-item-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .fs-7 {
+        font-size: 0.85rem;
+    }
+    .table > :not(caption) > * > * {
+        padding: 12px 8px;
+    }
+</style>

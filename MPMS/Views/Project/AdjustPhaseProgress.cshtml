@@ -1,0 +1,101 @@
+@model MPMS.Models.ProjectPhase
+@{
+    var project = ViewBag.Project as MPMS.Models.Project ?? new MPMS.Models.Project();
+    ViewData["Title"] = "調整專案階段進度";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-transparent border-0 pt-4 px-4">
+                <h4 class="card-title fw-bold text-dark mb-1">調整專案階段進度</h4>
+                <p class="text-muted small mb-0">手動調整專案階段的最新進度與狀態</p>
+            </div>
+            
+            <div class="card-body px-4 pb-4">
+                <hr class="mt-0 mb-4">
+                
+                <form asp-action="AdjustPhaseProgress" method="post">
+                    @if (!ViewData.ModelState.IsValid)
+                    {
+                        <div class="alert alert-danger rounded-3" role="alert">
+                            <div asp-validation-summary="All"></div>
+                        </div>
+                    }
+
+                    <input type="hidden" name="phaseId" value="@Model.PhaseId" />
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold text-muted">所屬專案 / 階段名稱</label>
+                        <h6 class="text-secondary mb-1">專案：@project.ProjectName</h6>
+                        <h5 class="fw-bold text-dark">📍 @Model.PhaseName</h5>
+                    </div>
+
+                    <!-- Progress Percentage -->
+                    <div class="mb-4">
+                        <label for="manualProgressPct" class="form-label fw-semibold">進度百分比 (%)</label>
+                        <div class="row align-items-center g-3">
+                            <div class="col">
+                                <input type="range" class="form-range" min="0" max="100" step="5" id="progressRange" value="@Model.ManualProgressPct.ToString("0")" oninput="updateProgressInput(this.value)">
+                            </div>
+                            <div class="col-auto" style="width: 110px;">
+                                <div class="input-group">
+                                    <input type="number" class="form-control rounded-3 text-center fw-bold" id="manualProgressPct" name="manualProgressPct" min="0" max="100" value="@Model.ManualProgressPct.ToString("0")" oninput="updateProgressRange(this.value)" required />
+                                    <span class="input-group-text bg-light">%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Phase Status -->
+                    <div class="mb-4">
+                        <label for="phaseStatus" class="form-label fw-semibold">階段狀態</label>
+                        <select class="form-select rounded-3" id="phaseStatus" name="phaseStatus" onchange="updateProgressFromStatus(this.value)" required>
+                            <option value="Planned" selected="@(Model.PhaseStatus == "Planned")">規劃中 (Planned)</option>
+                            <option value="Active" selected="@(Model.PhaseStatus == "Active")">進行中 (Active)</option>
+                            <option value="Completed" selected="@(Model.PhaseStatus == "Completed")">已完成 (Completed)</option>
+                            <option value="Voided" selected="@(Model.PhaseStatus == "Voided")">作廢 (Voided)</option>
+                        </select>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <a href="/Project/Phases?projectId=@Model.ProjectId" class="btn btn-outline-secondary rounded-3 px-4 py-2">取消</a>
+                        <button type="submit" class="btn btn-primary rounded-3 px-4 py-2">儲存變更</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function updateProgressInput(val) {
+            document.getElementById('manualProgressPct').value = val;
+            if (val == 100) {
+                document.getElementById('phaseStatus').value = "Completed";
+            } else if (val > 0 && document.getElementById('phaseStatus').value == "Planned") {
+                document.getElementById('phaseStatus').value = "Active";
+            }
+        }
+        function updateProgressRange(val) {
+            if (val >= 0 && val <= 100) {
+                document.getElementById('progressRange').value = val;
+            }
+            if (val == 100) {
+                document.getElementById('phaseStatus').value = "Completed";
+            } else if (val > 0 && document.getElementById('phaseStatus').value == "Planned") {
+                document.getElementById('phaseStatus').value = "Active";
+            }
+        }
+        function updateProgressFromStatus(status) {
+            if (status == "Completed") {
+                document.getElementById('manualProgressPct').value = 100;
+                document.getElementById('progressRange').value = 100;
+            } else if (status == "Planned") {
+                document.getElementById('manualProgressPct').value = 0;
+                document.getElementById('progressRange').value = 0;
+            }
+        }
+    </script>
+}

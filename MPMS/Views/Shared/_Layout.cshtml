@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - MPMS</title>
+    <script type="importmap"></script>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/MPMS.styles.css" asp-append-version="true" />
+</head>
+<body>
+    <header>
+        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-dark bg-dark border-bottom box-shadow mb-4">
+            <div class="container">
+                <a class="navbar-brand fw-bold text-gradient" asp-area="" asp-controller="Dashboard" asp-action="Index">
+                    <span style="background: linear-gradient(135deg, #a5b4fc 0%, #818cf8 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">MPMS</span>
+                </a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
+                        aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
+                    <ul class="navbar-nav flex-grow-1">
+                        @if (User.Identity?.IsAuthenticated == true)
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="Dashboard" asp-action="Index">個人工作台</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="/Project">專案看板</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="/Meeting/ListMeetings">週會控制台</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="/Meeting/Trends">歷史進度趨勢</a>
+                            </li>
+                            @if (User.IsInRole("ADMIN"))
+                            {
+                                <li class="nav-item dropdown">
+                                    <a class="nav-link dropdown-toggle" href="#" id="adminDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                        系統管理
+                                    </a>
+                                    <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="adminDropdown">
+                                        <li><a class="dropdown-item" href="/Admin/Users">使用者維護</a></li>
+                                        <li><a class="dropdown-item" href="/Admin/AuditLogs">系統稽核日誌</a></li>
+                                    </ul>
+                                </li>
+                            }
+                        }
+                    </ul>
+                    <ul class="navbar-nav">
+                        @if (User.Identity?.IsAuthenticated == true)
+                        {
+                            <li class="nav-item d-flex align-items-center me-2">
+                                <a href="/Notification" class="nav-link text-light position-relative" title="通知中心">
+                                    🔔
+                                    <span class="position-absolute translate-middle badge rounded-pill bg-danger" id="notificationBadgeCount" style="display: none; top: 12px; left: 85%; font-size: 0.65rem; padding: 0.25em 0.4em;">
+                                        0
+                                    </span>
+                                </a>
+                            </li>
+                            <li class="nav-item d-flex align-items-center">
+                                <span class="nav-link text-light me-3">
+                                    👤 @User.FindFirst("UserName")?.Value (@User.FindFirst("RoleName")?.Value)
+                                </span>
+                            </li>
+                            <li class="nav-item">
+                                <a class="btn btn-sm btn-outline-danger" asp-controller="Account" asp-action="Logout">安全登出</a>
+                            </li>
+                        }
+                        else
+                        {
+                            <li class="nav-item">
+                                <a class="btn btn-sm btn-primary" asp-controller="Account" asp-action="Login">登入</a>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        </nav>
+    </header>
+    <div class="container">
+        <main role="main" class="pb-5">
+            @RenderBody()
+        </main>
+    </div>
+
+    <footer class="border-top footer text-muted bg-light py-3 mt-auto">
+        <div class="container text-center">
+            &copy; 2026 - MPMS 多專案管理系統 - 適用於進度、會議、附件與審查之全局控管
+        </div>
+    </footer>
+    <!-- Custom Toast Container -->
+    <div id="customToastContainer" class="position-fixed top-0 end-0 p-3" style="z-index: 1080; max-width: 350px;"></div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js" integrity="sha512-7SrC1l0/1f4pEqo67+Z0xP+B66fLnd9jH5jW/s265/2vN2Z+Jb0Y3V7M8hT58tZ1E4w9bFk7rT9PzW67tO5b==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        <script>
+            // 1. Initial count check
+            $.getJSON('/Notification/GetUnreadCount', function(data) {
+                if (data && data.count > 0) {
+                    $('#notificationBadgeCount').text(data.count).show();
+                }
+            });
+
+            // 2. Establish SignalR notification connection
+            const notifConnection = new signalR.HubConnectionBuilder()
+                .withUrl("/notificationHub")
+                .withAutomaticReconnect()
+                .build();
+
+            notifConnection.on("ReceiveNotification", function(notification) {
+                // Show dynamic Toast
+                showAppToast(notification.title, notification.message);
+                
+                // Update badge count
+                var badge = $('#notificationBadgeCount');
+                var count = parseInt(badge.text()) || 0;
+                count++;
+                badge.text(count).show();
+            });
+
+            notifConnection.start().catch(function(err) {
+                console.error("SignalR NotificationHub error: ", err.toString());
+            });
+
+            function showAppToast(title, message) {
+                var toastId = 'toast-' + Date.now();
+                var html = `
+                    <div id="${toastId}" class="toast bg-white border border-light shadow-lg" role="alert" aria-live="assertive" aria-atomic="true" style="border-radius:12px; margin-bottom: 10px;">
+                        <div class="toast-header border-bottom-0 pb-1 pt-3 px-3 d-flex justify-content-between align-items-center">
+                            <strong class="me-auto text-indigo">🔔 ${title}</strong>
+                            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+                        </div>
+                        <div class="toast-body pb-3 pt-1 px-3 fs-7 text-muted">
+                            ${message}
+                            <div class="mt-2">
+                                <a href="/Notification" class="btn btn-xs btn-indigo text-light rounded-pill px-3 py-1">打開收件匣</a>
+                            </div>
+                        </div>
+                    </div>`;
+
+                $('#customToastContainer').append(html);
+                var toastEl = document.getElementById(toastId);
+                var toast = new bootstrap.Toast(toastEl, { delay: 6000 });
+                toast.show();
+
+                // Remove from DOM after hidden
+                toastEl.addEventListener('hidden.bs.toast', function() {
+                    $(this).remove();
+                });
+            }
+        </script>
+        
+        <style>
+            .text-indigo {
+                color: #4f46e5 !important;
+            }
+            .btn-indigo {
+                background-color: #4f46e5;
+                border-color: #4f46e5;
+            }
+            .btn-indigo:hover {
+                background-color: #4338ca;
+            }
+            .btn-xs {
+                padding: 0.2rem 0.6rem;
+                font-size: 0.75rem;
+            }
+            .fs-7 {
+                font-size: 0.85rem;
+            }
+        </style>
+    }
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

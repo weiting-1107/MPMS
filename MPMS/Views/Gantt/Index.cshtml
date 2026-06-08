@@ -1,0 +1,531 @@
+@model MPMS.Models.Project
+@{
+    ViewData["Title"] = $"【甘特圖】{ViewBag.Project.ProjectName}";
+    var project = ViewBag.Project as MPMS.Models.Project;
+    var isPmOrAdmin = User.IsInRole("ADMIN") || User.IsInRole("PM");
+}
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/frappe-gantt/0.6.1/frappe-gantt.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/snap.svg/0.5.1/snap.svg-min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/frappe-gantt/0.6.1/frappe-gantt.min.js"></script>
+
+<style>
+    /* Gantt page premium styling */
+    .gantt-header {
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        color: #f8fafc;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    }
+    
+    .view-btn-group .btn {
+        transition: all 0.2s ease;
+    }
+    .view-btn-group .btn.active {
+        background-color: #3b82f6 !important;
+        color: #fff !important;
+        border-color: #3b82f6 !important;
+    }
+
+    /* Frappe Gantt custom bars colors styling */
+    .gantt .gantt-phase-bar .bar {
+        fill: #8b5cf6 !important;
+        fill-opacity: 0.65 !important;
+    }
+    .gantt .gantt-phase-bar .bar-progress {
+        fill: #7c3aed !important;
+    }
+    
+    .gantt .gantt-default-bar .bar {
+        fill: #64748b !important;
+    }
+    .gantt .gantt-blocked-bar .bar {
+        fill: #ef4444 !important;
+    }
+    .gantt .gantt-reviewing-bar .bar {
+        fill: #3b82f6 !important;
+    }
+    .gantt .gantt-done-bar .bar {
+        fill: #10b981 !important;
+    }
+    .gantt .gantt-milestone-bar .bar {
+        fill: #f59e0b !important;
+    }
+    
+    /* Overdue highlight border */
+    .gantt .gantt-overdue-border .bar {
+        stroke: #dc2626 !important;
+        stroke-width: 3px !important;
+    }
+
+    /* Gantt grid and text styling */
+    .gantt .grid-header {
+        fill: #f1f5f9 !important;
+        stroke: #e2e8f0 !important;
+    }
+    .gantt .grid-row {
+        fill: #ffffff !important;
+        stroke: #f1f5f9 !important;
+    }
+    .gantt .grid-row:nth-child(even) {
+        fill: #f8fafc !important;
+    }
+    .gantt .tick {
+        stroke: #e2e8f0 !important;
+    }
+    .gantt .bar-label {
+        fill: #1e293b !important;
+        font-weight: 500;
+        font-size: 11px;
+    }
+    .gantt .handle {
+        fill: #94a3b8 !important;
+    }
+</style>
+
+<div class="container-fluid py-4">
+    <!-- Header Card -->
+    <div class="gantt-header p-4 mb-4 d-flex flex-wrap align-items-center justify-content-between">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-1">
+                    <li class="breadcrumb-item"><a href="/Project/Manage" class="text-blue-400 text-decoration-none">專案管理</a></li>
+                    <li class="breadcrumb-item active text-slate-300" aria-current="page">甘特圖時程檢視</li>
+                </ol>
+            </nav>
+            <h2 class="fw-bold mb-0 text-white d-flex align-items-center gap-2">
+                📊 @project.ProjectName
+                <span class="badge bg-primary fs-6">@project.ProjectStatus</span>
+            </h2>
+            <p class="text-slate-400 small mb-0 mt-1">
+                📅 專案期間：@project.StartDate.ToString("yyyy-MM-dd") ~ @project.EndDate.ToString("yyyy-MM-dd") 
+                | 👑 PM：<span id="currentPmName">@project.PmUserName</span>
+                @if (isPmOrAdmin)
+                {
+                    <button type="button" class="btn btn-link btn-sm text-warning p-0 ms-1" onclick="openEditPmModal()" title="修改 PM">✏️</button>
+                }
+            </p>
+        </div>
+        <div class="d-flex gap-2 mt-3 mt-md-0">
+            @if (isPmOrAdmin)
+            {
+                <a href="/Project/Phases?projectId=@project.ProjectId" class="btn btn-outline-light rounded-3 px-3">
+                    📂 專案階段與任務維護
+                </a>
+            }
+        </div>
+    </div>
+
+    <!-- Toolbar / Filters -->
+    <div class="card border-0 shadow-sm mb-4 rounded-3">
+        <div class="card-body p-3 d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <!-- Filter inputs -->
+            <div class="d-flex flex-wrap align-items-center gap-3">
+                <div>
+                    <label class="form-label small text-muted mb-1 fw-bold">任務狀態篩選</label>
+                    <select id="statusFilter" class="form-select form-select-sm rounded-3" style="width: 150px;">
+                        <option value="All">全部狀態</option>
+                        <option value="Todo">待處理 (Todo)</option>
+                        <option value="Progress">進行中 (Progress)</option>
+                        <option value="Blocked">卡關中 (Blocked)</option>
+                        <option value="Reviewing">審查中 (Reviewing)</option>
+                        <option value="Done">已完成 (Done)</option>
+                    </select>
+                </div>
+                <div class="pt-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="milestoneOnly">
+                        <label class="form-check-label small fw-bold text-muted" for="milestoneOnly">僅顯示里程碑</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View scale selector -->
+            <div>
+                <label class="form-label small text-muted mb-1 d-block fw-bold text-end">視圖縮放</label>
+                <div class="btn-group view-btn-group" role="group">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="changeViewMode('Quarter Day')">6小時</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="changeViewMode('Half Day')">半天</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary active" onclick="changeViewMode('Day')">天</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="changeViewMode('Week')">週</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="changeViewMode('Month')">月</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gantt Chart SVG Area -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-0">
+            <div id="gantt-container" class="overflow-auto p-3" style="min-height: 500px; background-color: #fafafa;">
+                <svg id="gantt-chart-svg"></svg>
+            </div>
+        </div>
+    </div>
+
+    <!-- Color Legend -->
+    <div class="d-flex flex-wrap justify-content-center gap-4 py-2 border rounded-3 bg-light mb-4">
+        <div class="d-flex align-items-center gap-2">
+            <span class="d-inline-block rounded" style="width: 20px; height: 12px; background-color: #8b5cf6; opacity: 0.65;"></span>
+            <span class="small fw-semibold text-muted">專案階段</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="d-inline-block rounded" style="width: 20px; height: 12px; background-color: #64748b;"></span>
+            <span class="small fw-semibold text-muted">Todo / Progress</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="d-inline-block rounded" style="width: 20px; height: 12px; background-color: #ef4444;"></span>
+            <span class="small fw-semibold text-muted">卡關中 (Blocked)</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="d-inline-block rounded" style="width: 20px; height: 12px; background-color: #3b82f6;"></span>
+            <span class="small fw-semibold text-muted">審查中 (Reviewing)</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="d-inline-block rounded" style="width: 20px; height: 12px; background-color: #10b981;"></span>
+            <span class="small fw-semibold text-muted">已完成 (Done)</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="d-inline-block rounded" style="width: 20px; height: 12px; background-color: #f59e0b;"></span>
+            <span class="small fw-semibold text-muted">里程碑任務</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="d-inline-block rounded border border-danger border-2" style="width: 20px; height: 12px; background-color: #e2e8f0;"></span>
+            <span class="small fw-semibold text-muted">逾期任務 (紅粗框)</span>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Cross Phase Reason -->
+<div class="modal fade" id="reasonModal" tabindex="-1" aria-labelledby="reasonModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-3 border-0 shadow">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title fw-bold" id="reasonModalLabel">⚠️ 跨階段日期調整確認</h5>
+            </div>
+            <div class="modal-body">
+                <p id="reasonModalMsg" class="small text-muted"></p>
+                <div class="mb-3">
+                    <label for="crossPhaseReasonText" class="form-label fw-semibold">跨階段調整原因說明 <span class="text-danger">*</span></label>
+                    <textarea class="form-control rounded-3" id="crossPhaseReasonText" rows="3" placeholder="請填寫跨專案階段的時間調整原因..." required></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" onclick="cancelDateUpdate()">取消變更</button>
+                <button type="button" class="btn btn-warning" onclick="submitDateUpdateWithReason()">送出並儲存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Edit Project PM -->
+<div class="modal fade" id="editPmModal" tabindex="-1" aria-labelledby="editPmModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-3 border-0 shadow">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fw-bold" id="editPmModalLabel">👑 修改專案 PM</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-3">請選擇新的專案經理，此操作將被記錄至審計日誌。</p>
+                <div class="mb-3">
+                    <label for="newPmSelect" class="form-label fw-semibold">新 PM <span class="text-danger">*</span></label>
+                    <select id="newPmSelect" class="form-select rounded-3">
+                        <option value="">-- 請選擇 --</option>
+                    </select>
+                </div>
+                <div id="editPmError" class="alert alert-danger d-none small py-2"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="submitEditPm()">✅ 確認更換 PM</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Anti-forgery Token -->
+<form id="antiforgery-form">
+    @Html.AntiForgeryToken()
+</form>
+
+<script>
+    let rawGanttData = [];
+    let ganttInstance = null;
+    let currentViewMode = 'Day';
+    const isPmOrAdmin = @(isPmOrAdmin ? "true" : "false");
+    
+    // Date update temp storage
+    let tempUpdateParams = null;
+    let tempOriginalTask = null;
+
+    document.addEventListener("DOMContentLoaded", function () {
+        loadGanttData();
+
+        // Register filter listeners
+        document.getElementById("statusFilter").addEventListener("change", renderFilteredGantt);
+        document.getElementById("milestoneOnly").addEventListener("change", renderFilteredGantt);
+    });
+
+    function loadGanttData() {
+        fetch(`/Gantt/GetData?projectId=@project.ProjectId`)
+            .then(res => res.json())
+            .then(data => {
+                rawGanttData = data;
+                renderFilteredGantt();
+            })
+            .catch(err => {
+                console.error("載入甘特圖資料時發生錯誤：", err);
+                alert("無法載入甘特圖資料。");
+            });
+    }
+
+    function renderFilteredGantt() {
+        const statusVal = document.getElementById("statusFilter").value;
+        const milestoneOnly = document.getElementById("milestoneOnly").checked;
+
+        // Filter algorithm
+        let filtered = rawGanttData.filter(item => {
+            if (item.type === 'phase') return true; // always show phases
+            
+            // Status check
+            if (statusVal !== 'All' && item.status !== statusVal) {
+                return false;
+            }
+            // Milestone check
+            if (milestoneOnly && item.type !== 'milestone') {
+                return false;
+            }
+            return true;
+        });
+
+        // If a phase has no tasks left after filtering, we can optionally hide it or keep it.
+        // Let's keep all phases to show layout.
+
+        if (filtered.length === 0) {
+            document.getElementById("gantt-container").innerHTML = '<div class="alert alert-info text-center py-5 rounded-3 m-3">此篩選條件下無符合的任務項目。</div>';
+            ganttInstance = null;
+            return;
+        }
+
+        // Restore SVG
+        document.getElementById("gantt-container").innerHTML = '<svg id="gantt-chart-svg"></svg>';
+
+        // Instantiate Gantt
+        ganttInstance = new Gantt("#gantt-chart-svg", filtered, {
+            view_modes: ['Quarter Day', 'Half Day', 'Day', 'Week', 'Month'],
+            view_mode: currentViewMode,
+            language: 'zh',
+            custom_popup_html: function(task) {
+                if (task.type === 'phase') {
+                    return `
+                        <div class="details-container p-2 small">
+                            <h6 class="fw-bold mb-1">${task.name}</h6>
+                            <p class="mb-0">進度: ${task.progress}%</p>
+                            <p class="mb-0">期間: ${task.start} 至 ${task.end}</p>
+                        </div>
+                    `;
+                }
+                return `
+                    <div class="details-container p-2 small" style="min-width: 200px;">
+                        <h6 class="fw-bold mb-1">${task.name}</h6>
+                        <p class="mb-1">主辦人: <span class="badge bg-light text-dark">${task.owner}</span></p>
+                        <p class="mb-1">狀態: <span class="badge bg-secondary">${task.status}</span></p>
+                        <p class="mb-0">期間: ${task.start} 至 ${task.end}</p>
+                        <div class="mt-2 text-center">
+                            <a href="/Task/Details/${task.realId}" class="btn btn-xs btn-primary text-white py-0.5 px-2 rounded small" style="font-size: 10px;">
+                                檢視任務詳情
+                            </a>
+                        </div>
+                    </div>
+                `;
+            },
+            on_date_change: function(task, start, end) {
+                if (!isPmOrAdmin) {
+                    alert("權限不足！只有專案經理 (PM) 或系統管理員可調整任務時程。");
+                    loadGanttData(); // Revert
+                    return;
+                }
+                if (task.type === 'phase') {
+                    alert("無法直接在此拖拉調整階段區間！請至階段維護畫面修改。");
+                    loadGanttData(); // Revert
+                    return;
+                }
+
+                // Store state for possible revert or confirmation
+                tempUpdateParams = {
+                    taskId: task.realId,
+                    plannedStartDate: formatDate(start),
+                    dueDate: formatDate(end),
+                    rowVersionStr: task.rowVersion,
+                    crossPhaseReason: null
+                };
+                tempOriginalTask = task;
+
+                // Fire initial update
+                sendDateUpdate(tempUpdateParams);
+            },
+            on_progress_change: function(task, progress) {
+                // Readonly progress in gantt for tasks, we only update via details review
+                loadGanttData();
+            }
+        });
+    }
+
+    function changeViewMode(mode) {
+        currentViewMode = mode;
+        // Update active class on button
+        const btnGroup = document.querySelector(".view-btn-group");
+        btnGroup.querySelectorAll(".btn").forEach(btn => {
+            btn.classList.remove("active");
+            if (btn.innerText.includes(mode) || (mode === 'Quarter Day' && btn.innerText.includes('6小時')) || (mode === 'Half Day' && btn.innerText.includes('半天')) || (mode === 'Day' && btn.innerText === '天')) {
+                btn.classList.add("active");
+            }
+        });
+
+        if (ganttInstance) {
+            ganttInstance.change_view_mode(mode);
+        }
+    }
+
+    function formatDate(date) {
+        let d = new Date(date),
+            month = '' + (d.getMonth() + 1),
+            day = '' + d.getDate(),
+            year = d.getFullYear();
+
+        if (month.length < 2) month = '0' + month;
+        if (day.length < 2) day = '0' + day;
+
+        return [year, month, day].join('-');
+    }
+
+    function sendDateUpdate(params) {
+        const formData = new FormData();
+        formData.append("taskId", params.taskId);
+        formData.append("plannedStartDate", params.plannedStartDate);
+        formData.append("dueDate", params.dueDate);
+        formData.append("rowVersionStr", params.rowVersionStr);
+        if (params.crossPhaseReason) {
+            formData.append("crossPhaseReason", params.crossPhaseReason);
+        }
+
+        const token = document.querySelector('#antiforgery-form input[name="__RequestVerificationToken"]').value;
+
+        fetch('/Gantt/UpdateTaskDates', {
+            method: 'POST',
+            headers: {
+                'RequestVerificationToken': token
+            },
+            body: formData
+        })
+        .then(res => res.json())
+        .then(res => {
+            if (res.success) {
+                // Success! Refresh
+                // Close modal if open
+                const modal = bootstrap.Modal.getInstance(document.getElementById('reasonModal'));
+                if (modal) modal.hide();
+                
+                loadGanttData();
+            } 
+            else if (res.requireReason) {
+                // Open reason input modal
+                document.getElementById("reasonModalMsg").innerText = res.message;
+                document.getElementById("crossPhaseReasonText").value = "";
+                const modal = new bootstrap.Modal(document.getElementById('reasonModal'));
+                modal.show();
+            } 
+            else {
+                alert("更新失敗：" + res.message);
+                loadGanttData(); // Revert UI
+            }
+        })
+        .catch(err => {
+            console.error("更新日期發生錯誤：", err);
+            alert("更新日期發生伺服器錯誤。");
+            loadGanttData();
+        });
+    }
+
+    function submitDateUpdateWithReason() {
+        const reason = document.getElementById("crossPhaseReasonText").value.trim();
+        if (!reason) {
+            alert("請填寫跨階段原因！");
+            return;
+        }
+
+        if (tempUpdateParams) {
+            tempUpdateParams.crossPhaseReason = reason;
+            sendDateUpdate(tempUpdateParams);
+        }
+    }
+
+    function cancelDateUpdate() {
+        const modal = bootstrap.Modal.getInstance(document.getElementById('reasonModal'));
+        if (modal) modal.hide();
+        loadGanttData(); // Revert bar position
+    }
+
+    // ── PM 編輯 ──────────────────────────────────────────
+    function openEditPmModal() {
+        const select = document.getElementById('newPmSelect');
+        const errDiv = document.getElementById('editPmError');
+        select.innerHTML = '<option value="">載入中...</option>';
+        errDiv.classList.add('d-none');
+
+        fetch('/Gantt/GetPmCandidates')
+            .then(r => r.json())
+            .then(list => {
+                select.innerHTML = '<option value="">-- 請選擇 --</option>';
+                list.forEach(u => {
+                    const opt = document.createElement('option');
+                    opt.value = u.userId;
+                    opt.textContent = u.userName;
+                    select.appendChild(opt);
+                });
+            })
+            .catch(() => {
+                select.innerHTML = '<option value="">載入失敗</option>';
+            });
+
+        new bootstrap.Modal(document.getElementById('editPmModal')).show();
+    }
+
+    function submitEditPm() {
+        const newPmUserId = document.getElementById('newPmSelect').value;
+        const errDiv = document.getElementById('editPmError');
+        errDiv.classList.add('d-none');
+
+        if (!newPmUserId) {
+            errDiv.textContent = '請選擇新的 PM！';
+            errDiv.classList.remove('d-none');
+            return;
+        }
+
+        const token = document.querySelector('#antiforgery-form input[name="__RequestVerificationToken"]').value;
+        const projectId = @project.ProjectId;
+
+        fetch('/Gantt/UpdateProjectPm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `projectId=${projectId}&newPmUserId=${newPmUserId}&__RequestVerificationToken=${encodeURIComponent(token)}`
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('currentPmName').textContent = data.newPmUserName;
+                bootstrap.Modal.getInstance(document.getElementById('editPmModal')).hide();
+                alert(`✅ PM 已成功更換為：${data.newPmUserName}，變更已記錄至審計日誌。`);
+            } else {
+                errDiv.textContent = data.message || '更新失敗，請稍後再試。';
+                errDiv.classList.remove('d-none');
+            }
+        })
+        .catch(() => {
+            errDiv.textContent = '伺服器連線異常，請稍後再試。';
+            errDiv.classList.remove('d-none');
+        });
+    }
+</script>
+

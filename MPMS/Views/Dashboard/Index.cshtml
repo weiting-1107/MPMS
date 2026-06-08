@@ -1,0 +1,289 @@
+@{
+    ViewData["Title"] = "個人工作台";
+    var myTasks = ViewBag.MyTasks as IEnumerable<MPMS.Models.TaskModel> ?? new List<MPMS.Models.TaskModel>();
+    var assistTasks = ViewBag.AssistTasks as IEnumerable<MPMS.Models.TaskModel> ?? new List<MPMS.Models.TaskModel>();
+    var reviewTasks = ViewBag.ReviewTasks as IEnumerable<MPMS.Models.TaskModel> ?? new List<MPMS.Models.TaskModel>();
+}
+
+<!-- Welcome Header -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm rounded-4 text-white overflow-hidden" style="background: linear-gradient(135deg, #6366f1 0%, #312e81 100%);">
+            <div class="card-body p-4 p-md-5">
+                <h1 class="display-6 fw-bold mb-2">歡迎回來，@User.FindFirst("UserName")?.Value！</h1>
+                <p class="fs-5 opacity-75 mb-0">您目前的系統角色是：<strong>@User.FindFirst("RoleName")?.Value</strong></p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Left Column: Task Lists -->
+    <div class="col-lg-8">
+        
+        <!-- 待審查任務 (Only show if there are tasks) -->
+        @if (reviewTasks.Any())
+        {
+            <div class="card border-0 shadow-sm rounded-4 mb-4" style="border-left: 5px solid #eab308 !important;">
+                <div class="card-header bg-transparent border-0 pt-4 px-4">
+                    <h5 class="card-title fw-bold text-dark mb-0">🛡️ 待我審查的任務 (@reviewTasks.Count())</h5>
+                </div>
+                <div class="card-body px-4 pb-4">
+                    <hr class="mt-2 mb-3">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead>
+                                <tr>
+                                    <th>任務名稱</th>
+                                    <th>負責人</th>
+                                    <th>截止日</th>
+                                    <th class="text-end">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var task in reviewTasks)
+                                {
+                                    <tr>
+                                        <td>
+                                            <a href="/Task/Details/@task.TaskId" class="fw-bold text-decoration-none text-dark">@task.TaskTitle</a>
+                                            <br><span class="text-muted small">@task.ProjectName &gt; @task.PhaseName</span>
+                                        </td>
+                                        <td>@task.OwnerUserName</td>
+                                        <td><span class="text-danger small">📅 @task.DueDate.ToString("yyyy-MM-dd")</span></td>
+                                        <td class="text-end">
+                                            <a href="/Task/Details/@task.TaskId" class="btn btn-sm btn-warning rounded-2 py-1 px-2.5">審查</a>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- 我主辦的任務 -->
+        <div class="card border-0 shadow-sm rounded-4 mb-4">
+            <div class="card-header bg-transparent border-0 pt-4 px-4 d-flex justify-content-between align-items-center">
+                <h5 class="card-title fw-bold text-dark mb-0">👑 我主辦的任務 (@myTasks.Count())</h5>
+            </div>
+            <div class="card-body px-4 pb-4">
+                <hr class="mt-2 mb-3">
+                @if (!myTasks.Any())
+                {
+                    <p class="text-muted py-3 text-center small mb-0">目前沒有指派給您的進行中任務。🎉</p>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>任務名稱</th>
+                                    <th>截止日</th>
+                                    <th>優先度</th>
+                                    <th>狀態</th>
+                                    <th class="text-end">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var task in myTasks)
+                                {
+                                    <tr>
+                                        <td>
+                                            <a href="/Task/Details/@task.TaskId" class="fw-bold text-decoration-none text-dark">@task.TaskTitle</a>
+                                            <br><span class="text-muted small">@task.ProjectName &gt; @task.PhaseName</span>
+                                        </td>
+                                        <td>
+                                            <span class="@(task.DueDate < DateTime.Today ? "text-danger fw-bold" : "text-muted") small">
+                                                📅 @task.DueDate.ToString("yyyy-MM-dd")
+                                                @(task.DueDate < DateTime.Today ? "(逾期)" : "")
+                                            </span>
+                                        </td>
+                                        <td>
+                                            @if (task.Priority == "High")
+                                            {
+                                                <span class="badge bg-danger">高</span>
+                                            }
+                                            else if (task.Priority == "Normal")
+                                            {
+                                                <span class="badge bg-primary">中</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-secondary">低</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (task.TaskStatus == "Todo")
+                                            {
+                                                <span class="badge bg-secondary">待處理</span>
+                                            }
+                                            else if (task.TaskStatus == "Progress")
+                                            {
+                                                <span class="badge bg-primary">進行中</span>
+                                            }
+                                            else if (task.TaskStatus == "Blocked")
+                                            {
+                                                <span class="badge bg-danger">卡關</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-warning text-dark">審查中</span>
+                                            }
+                                        </td>
+                                        <td class="text-end">
+                                            <a href="/Task/Details/@task.TaskId" class="btn btn-sm btn-outline-secondary rounded-2">詳情</a>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- 我協辦的任務 -->
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-transparent border-0 pt-4 px-4">
+                <h5 class="card-title fw-bold text-dark mb-0">🤝 我協辦的任務 (@assistTasks.Count())</h5>
+            </div>
+            <div class="card-body px-4 pb-4">
+                <hr class="mt-2 mb-3">
+                @if (!assistTasks.Any())
+                {
+                    <p class="text-muted py-3 text-center small mb-0">目前沒有您協辦的進行中任務。</p>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>任務名稱</th>
+                                    <th>主辦負責人</th>
+                                    <th>截止日</th>
+                                    <th>狀態</th>
+                                    <th class="text-end">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var task in assistTasks)
+                                {
+                                    <tr>
+                                        <td>
+                                            <a href="/Task/Details/@task.TaskId" class="fw-bold text-decoration-none text-dark">@task.TaskTitle</a>
+                                            <br><span class="text-muted small">@task.ProjectName &gt; @task.PhaseName</span>
+                                        </td>
+                                        <td>@task.OwnerUserName</td>
+                                        <td><span class="text-muted small">📅 @task.DueDate.ToString("yyyy-MM-dd")</span></td>
+                                        <td>
+                                            @if (task.TaskStatus == "Todo")
+                                            {
+                                                <span class="badge bg-secondary">待處理</span>
+                                            }
+                                            else if (task.TaskStatus == "Progress")
+                                            {
+                                                <span class="badge bg-primary">進行中</span>
+                                            }
+                                            else if (task.TaskStatus == "Blocked")
+                                            {
+                                                <span class="badge bg-danger">卡關</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-warning text-dark">審查中</span>
+                                            }
+                                        </td>
+                                        <td class="text-end">
+                                            <a href="/Task/Details/@task.TaskId" class="btn btn-sm btn-outline-secondary rounded-2">詳情</a>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Right Column: Profile & Navigation -->
+    <div class="col-lg-4">
+        
+        <!-- User Info Details Card -->
+        <div class="card border-0 shadow-sm rounded-4 mb-4">
+            <div class="card-header bg-transparent border-0 pt-4 px-4">
+                <h5 class="card-title fw-bold text-dark mb-0">帳號個人資訊</h5>
+            </div>
+            <div class="card-body px-4 pb-4">
+                <hr class="mt-2 mb-4">
+                <div class="d-flex flex-column gap-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">登入帳號</span>
+                        <span class="fw-semibold text-dark small">@User.Identity?.Name</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">使用者姓名</span>
+                        <span class="fw-semibold text-dark small">@User.FindFirst("UserName")?.Value</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">電子郵件</span>
+                        <span class="fw-semibold text-dark small">@User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">系統角色</span>
+                        <span class="badge bg-indigo-subtle text-indigo px-2.5 py-1.5 rounded-pill" style="color: #4f46e5; background-color: #e0e7ff; font-size: 0.75rem;">@User.FindFirst("RoleName")?.Value</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Quick Actions -->
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-transparent border-0 pt-4 px-4">
+                <h5 class="card-title fw-bold text-dark mb-0">系統模組導航</h5>
+            </div>
+            <div class="card-body px-4 pb-4">
+                <hr class="mt-2 mb-4">
+                <div class="row g-2">
+                    @if (User.IsInRole("ADMIN"))
+                    {
+                        <div class="col-6">
+                            <a href="/Admin/Users" class="btn btn-outline-primary w-100 py-3 rounded-3 d-flex flex-column align-items-center gap-2 small">
+                                <span class="fs-4">👥</span>
+                                <span>使用者維護</span>
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="/Admin/AuditLogs" class="btn btn-outline-secondary w-100 py-3 rounded-3 d-flex flex-column align-items-center gap-2 small">
+                                <span class="fs-4">📋</span>
+                                <span>稽核紀錄</span>
+                            </a>
+                        </div>
+                    }
+                    
+                    @if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
+                    {
+                        <div class="col-6">
+                            <a href="/Project/Manage" class="btn btn-outline-dark w-100 py-3 rounded-3 d-flex flex-column align-items-center gap-2 small">
+                                <span class="fs-4">⚙️</span>
+                                <span>專案管理</span>
+                            </a>
+                        </div>
+                    }
+                    
+                    <div class="col-6">
+                        <a href="/Project" class="btn btn-outline-success w-100 py-3 rounded-3 d-flex flex-column align-items-center gap-2 small">
+                            <span class="fs-4">📁</span>
+                            <span>全局專案看板</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>

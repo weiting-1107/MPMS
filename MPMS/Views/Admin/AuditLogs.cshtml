@@ -1,0 +1,97 @@
+@model IEnumerable<MPMS.Models.AuditLog>
+@{
+    ViewData["Title"] = "系統稽核日誌";
+}
+
+<div class="card border-0 shadow-sm rounded-4">
+    <div class="card-header bg-transparent border-0 pt-4 px-4">
+        <h4 class="card-title fw-bold text-dark mb-1">系統稽核日誌</h4>
+        <p class="text-muted small mb-0">記錄系統重要操作稽核軌跡，包含人員、行為與資料前後變化</p>
+    </div>
+    
+    <div class="card-body px-4 pb-4">
+        <hr class="mt-0 mb-4">
+        
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 80px;">編號</th>
+                        <th style="width: 150px;">操作時間</th>
+                        <th style="width: 140px;">操作者</th>
+                        <th style="width: 130px;">動作類型</th>
+                        <th style="width: 150px;">異動資料表</th>
+                        <th style="width: 80px;">資料 ID</th>
+                        <th>資料細節比對 (JSON)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var log in Model)
+                    {
+                        var accordionId = $"detailsCollapse_{log.AuditId}";
+                        <tr>
+                            <td class="text-secondary fw-bold">#@log.AuditId</td>
+                            <td class="small">@log.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                            <td>
+                                <span class="fw-semibold">@log.ActorUserName</span>
+                                <br>
+                                <span class="text-muted small">(@log.ActorAccount)</span>
+                            </td>
+                            <td>
+                                @if (log.ActionType.Contains("Create"))
+                                {
+                                    <span class="badge bg-success-subtle text-success px-2.5 py-1.5 rounded-3" style="color: #10b981 !important; background-color: #d1fae5 !important;">🆕 @log.ActionType</span>
+                                }
+                                else if (log.ActionType.Contains("Update"))
+                                {
+                                    <span class="badge bg-warning-subtle text-warning px-2.5 py-1.5 rounded-3" style="color: #d97706 !important; background-color: #fef3c7 !important;">✏️ @log.ActionType</span>
+                                }
+                                else if (log.ActionType.Contains("Delete") || log.ActionType.Contains("Void"))
+                                {
+                                    <span class="badge bg-danger-subtle text-danger px-2.5 py-1.5 rounded-3" style="color: #ef4444 !important; background-color: #fee2e2 !important;">❌ @log.ActionType</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-info-subtle text-info px-2.5 py-1.5 rounded-3" style="color: #2563eb !important; background-color: #dbeafe !important;">⚙️ @log.ActionType</span>
+                                }
+                            </td>
+                            <td><code class="text-dark fw-semibold">@log.TargetTable</code></td>
+                            <td><span class="badge bg-light text-dark border px-2 py-1">@log.TargetId</span></td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(log.OldValueJson) || !string.IsNullOrEmpty(log.NewValueJson))
+                                {
+                                    <button class="btn btn-sm btn-outline-primary rounded-2 py-1 px-2 text-nowrap" type="button" data-bs-toggle="collapse" data-bs-target="#@accordionId" aria-expanded="false" aria-controls="@accordionId">
+                                        🔍 檢視資料變動
+                                    </button>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">無詳細內容</span>
+                                }
+                            </td>
+                        </tr>
+                        @if (!string.IsNullOrEmpty(log.OldValueJson) || !string.IsNullOrEmpty(log.NewValueJson))
+                        {
+                            <tr class="collapse-row">
+                                <td colspan="7" class="p-0 border-0">
+                                    <div class="collapse px-4 py-3 bg-light" id="@accordionId" style="border-radius: 12px; margin: 5px 0 15px 0;">
+                                        <div class="row">
+                                            <div class="col-md-6 mb-2 mb-md-0">
+                                                <div class="fw-bold text-secondary small mb-1">⬅️ 異動前舊資料 (Old Value)</div>
+                                                <pre class="p-2 border rounded bg-white text-dark small overflow-auto" style="max-height: 250px; font-family: Consolas, monospace;"><code>@(string.IsNullOrEmpty(log.OldValueJson) ? "(無)" : log.OldValueJson)</code></pre>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="fw-bold text-primary small mb-1">➡️ 異動後新資料 (New Value)</div>
+                                                <pre class="p-2 border rounded bg-white text-dark small overflow-auto" style="max-height: 250px; font-family: Consolas, monospace;"><code>@(string.IsNullOrEmpty(log.NewValueJson) ? "(無)" : log.NewValueJson)</code></pre>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

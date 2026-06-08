@@ -1,0 +1,125 @@
+@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>拒絕存取 - MPMS</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            --accent-danger: #ef4444;
+            --text-light: #f8fafc;
+            --text-muted: #94a3b8;
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.08);
+        }
+
+        body {
+            font-family: 'Outfit', 'Noto Sans TC', sans-serif;
+            background: var(--bg-gradient);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-light);
+            margin: 0;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        .container-custom {
+            width: 100%;
+            max-width: 500px;
+            padding: 20px;
+            z-index: 10;
+        }
+
+        .card-custom {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+
+        .icon-danger {
+            font-size: 4rem;
+            color: var(--accent-danger);
+            margin-bottom: 20px;
+        }
+
+        .title-danger {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .desc-danger {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .btn-custom {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 12px 24px;
+            color: var(--text-light);
+            text-decoration: none;
+            font-weight: 500;
+            margin: 0 10px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-custom:hover {
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+            transform: translateY(-1px);
+        }
+
+        .btn-primary-custom {
+            background: var(--accent-danger);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+            border: none;
+        }
+
+        .btn-primary-custom:hover {
+            background: #dc2626;
+            box-shadow: 0 6px 18px rgba(239, 68, 68, 0.3);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container-custom">
+        <div class="card-custom">
+            <div class="icon-danger">⚠️</div>
+            <h1 class="title-danger">權限不足 (Access Denied)</h1>
+            <p class="desc-danger">
+                抱歉，您的帳號角色權限無法存取此頁面。<br>
+                如果您認為這是一個錯誤，請聯絡系統管理員。
+            </p>
+            <div>
+                <a href="/Dashboard" class="btn-custom btn-primary-custom">回個人工作台</a>
+                <a href="/Account/Logout" class="btn-custom">登出帳號</a>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

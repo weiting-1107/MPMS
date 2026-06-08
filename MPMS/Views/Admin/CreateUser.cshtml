@@ -1,0 +1,79 @@
+@model MPMS.Models.User
+@{
+    ViewData["Title"] = "新增使用者";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-transparent border-0 pt-4 px-4">
+                <h4 class="card-title fw-bold text-dark mb-1">新增使用者</h4>
+                <p class="text-muted small mb-0">建立新的系統使用者並分配其權限角色</p>
+            </div>
+            
+            <div class="card-body px-4 pb-4">
+                <hr class="mt-0 mb-4">
+                
+                <form asp-action="CreateUser" method="post">
+                    @if (!ViewData.ModelState.IsValid)
+                    {
+                        <div class="alert alert-danger rounded-3" role="alert">
+                            <div asp-validation-summary="All"></div>
+                        </div>
+                    }
+
+                    <div class="row g-3">
+                        <!-- Account -->
+                        <div class="col-md-6 mb-3">
+                            <label asp-for="Account" class="form-label fw-semibold">登入帳號</label>
+                            <input asp-for="Account" class="form-control rounded-3" placeholder="例如: user123" required />
+                            <span asp-validation-for="Account" class="text-danger small"></span>
+                        </div>
+
+                        <!-- User Name -->
+                        <div class="col-md-6 mb-3">
+                            <label asp-for="UserName" class="form-label fw-semibold">使用者姓名</label>
+                            <input asp-for="UserName" class="form-control rounded-3" placeholder="例如: 王小明" required />
+                            <span asp-validation-for="UserName" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Email -->
+                        <div class="col-md-6 mb-3">
+                            <label asp-for="Email" class="form-label fw-semibold">電子郵件 (Email)</label>
+                            <input asp-for="Email" type="email" class="form-control rounded-3" placeholder="例如: xiaoming@example.com" required />
+                            <span asp-validation-for="Email" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Role -->
+                        <div class="col-md-6 mb-3">
+                            <label asp-for="RoleId" class="form-label fw-semibold">分配角色</label>
+                            <select asp-for="RoleId" asp-items="ViewBag.Roles" class="form-select rounded-3" required>
+                                <option value="">-- 請選擇角色 --</option>
+                            </select>
+                            <span asp-validation-for="RoleId" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Password -->
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold" for="rawPassword">登入密碼</label>
+                            <input id="rawPassword" name="rawPassword" type="password" class="form-control rounded-3" placeholder="請設定預設密碼" required autocomplete="new-password" />
+                        </div>
+
+                        <!-- IsActive -->
+                        <div class="col-md-6 mb-3 d-flex align-items-center">
+                            <div class="form-check form-switch mt-4">
+                                <input asp-for="IsActive" class="form-check-input" type="checkbox" role="switch" id="isActiveSwitch">
+                                <label class="form-check-label fw-semibold" for="isActiveSwitch">啟用此帳號</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <a href="/Admin/Users" class="btn btn-outline-secondary rounded-3 px-4 py-2">取消</a>
+                        <button type="submit" class="btn btn-primary rounded-3 px-4 py-2">確認新增</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

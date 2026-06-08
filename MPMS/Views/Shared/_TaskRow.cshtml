@@ -1,0 +1,58 @@
+@model MPMS.Models.TaskModel
+
+<tr>
+    <td>
+        <a href="/Task/Details/@Model.TaskId" class="fw-bold text-dark text-decoration-none">
+            @Model.TaskTitle
+        </a>
+        <div class="text-muted" style="font-size: 0.8rem;">
+            📂 @Model.ProjectName &bull; 🏷️ @Model.PhaseName
+        </div>
+    </td>
+    <td>
+        <div class="d-flex align-items-center">
+            <div class="avatar-sm bg-light text-dark rounded-circle me-2 d-flex align-items-center justify-content-center fw-bold" style="width:24px; height:24px; font-size: 0.75rem;">
+                @Model.OwnerUserName?.Substring(0, Math.Min(1, Model.OwnerUserName?.Length ?? 0))
+            </div>
+            <span>@Model.OwnerUserName</span>
+        </div>
+    </td>
+    <td>
+        <span class="@(Model.DueDate < DateTime.Today && Model.TaskStatus != "Done" ? "text-danger fw-bold" : "text-muted")">
+            @Model.DueDate.ToString("yyyy-MM-dd")
+        </span>
+    </td>
+    <td>
+        @switch (Model.TaskStatus)
+        {
+            case "Todo":
+                <span class="badge bg-secondary">待處理</span>
+                break;
+            case "Progress":
+                <span class="badge bg-primary">進行中</span>
+                break;
+            case "Reviewing":
+                <span class="badge bg-info text-dark">審查中</span>
+                break;
+            case "Done":
+                <span class="badge bg-success">已完成</span>
+                break;
+            case "Blocked":
+                <span class="badge bg-danger" title="卡關原因：@Model.BlockedReason">卡關 🚧</span>
+                break;
+        }
+    </td>
+    <td>
+        <div class="d-flex gap-1">
+            @if ((User.IsInRole("ADMIN") || User.IsInRole("PM")) && (Model.TaskStatus == "Reviewing" || Model.TaskStatus == "Done"))
+            {
+                <button type="button" class="btn btn-xs btn-danger rounded-pill px-2" onclick="openReturnModal(@Model.TaskId, '@Model.TaskTitle')">
+                    🚫 現場退回
+                </button>
+            }
+            <a href="/Task/Details/@Model.TaskId" class="btn btn-xs btn-outline-secondary rounded-pill px-2">
+                詳情
+            </a>
+        </div>
+    </td>
+</tr>

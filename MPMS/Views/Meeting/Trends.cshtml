@@ -1,0 +1,234 @@
+@model IEnumerable<MPMS.Models.Project>
+@{
+    ViewData["Title"] = "專案歷史進度與卡關趨勢";
+}
+
+<div class="row mb-4 align-items-center">
+    <div class="col">
+        <h2 class="fw-bold text-dark mb-1">📈 歷史進度與卡關趨勢</h2>
+        <p class="text-muted mb-0">依據每週封存快照資料，統計專案進度百分比與卡關任務數量之歷史軌跡</p>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6 col-lg-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <label for="projectSelector" class="form-label fw-bold text-muted text-uppercase mb-2" style="font-size:0.75rem; letter-spacing:0.5px;">選擇要檢視的專案</label>
+                <select class="form-select border-light shadow-none" id="projectSelector" onchange="loadTrendCharts(this.value)">
+                    <option value="">-- 請選擇專案 --</option>
+                    @if (Model != null)
+                    {
+                        foreach (var p in Model)
+                        {
+                            <option value="@p.ProjectId">@p.ProjectName (@p.ProjectCode)</option>
+                        }
+                    }
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart Container -->
+<div class="row" id="chartsContainer" style="display:none;">
+    <div class="col-lg-6 mb-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white border-bottom-0 pt-3">
+                <h5 class="fw-bold text-dark mb-0">📈 專案進度手動調整歷史軌跡 (Progress %)</h5>
+            </div>
+            <div class="card-body py-4">
+                <div style="position: relative; height: 320px;">
+                    <canvas id="progressChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-6 mb-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white border-bottom-0 pt-3">
+                <h5 class="fw-bold text-dark mb-0">🚧 每週快照卡關任務數量統計 (Blocked Tasks)</h5>
+            </div>
+            <div class="card-body py-4">
+                <div style="position: relative; height: 320px;">
+                    <canvas id="blockedChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="noDataAlert" class="card border-0 shadow-sm text-center py-5 text-muted" style="display:block;">
+    <div class="card-body">
+        <div class="fs-1 mb-2">📊</div>
+        <h5 class="fw-bold text-dark mb-1">請選擇專案以開始分析</h5>
+        <p class="mb-0">選擇專案後，系統會自動載入該專案在歷次週會封存的快照數據。</p>
+    </div>
+</div>
+
+<div id="loadingIndicator" class="text-center py-5" style="display:none;">
+    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+        <span class="visually-hidden">載入中...</span>
+    </div>
+    <p class="text-muted mt-3">正在分析並讀取歷史快照數據...</p>
+</div>
+
+@section Scripts {
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script>
+        let progressChartInstance = null;
+        let blockedChartInstance = null;
+
+        $(document).ready(function() {
+            // Automatically select the first project if available
+            const firstProj = $('#projectSelector option:eq(1)').val();
+            if (firstProj) {
+                $('#projectSelector').val(firstProj);
+                loadTrendCharts(firstProj);
+            }
+        });
+
+        function loadTrendCharts(projectId) {
+            if (!projectId) {
+                $('#chartsContainer').hide();
+                $('#noDataAlert').show();
+                return;
+            }
+
+            $('#noDataAlert').hide();
+            $('#chartsContainer').hide();
+            $('#loadingIndicator').show();
+
+            $.getJSON('/Meeting/GetTrendData', { projectId: projectId })
+            .done(function(data) {
+                $('#loadingIndicator').hide();
+
+                if (!data.success || !data.weeks || data.weeks.length === 0) {
+                    $('#noDataAlert').find('h5').text('無歷史快照數據');
+                    $('#noDataAlert').find('p').text('此專案目前尚未於任何週會封存過快照。請先前往週會控制台執行「封存本週快照」！');
+                    $('#noDataAlert').show();
+                    return;
+                }
+
+                $('#chartsContainer').show();
+                renderCharts(data.weeks, data.progress, data.blocked);
+            })
+            .fail(function() {
+                $('#loadingIndicator').hide();
+                alert('載入趨勢圖表失敗，請重試。');
+            });
+        }
+
+        function renderCharts(weeks, progressData, blockedData) {
+            // Destroy existing instances if they exist
+            if (progressChartInstance) {
+                progressChartInstance.destroy();
+            }
+            if (blockedChartInstance) {
+                blockedChartInstance.destroy();
+            }
+
+            // 1. Progress Chart (Line Chart)
+            const ctxProgress = document.getElementById('progressChart').getContext('2d');
+            progressChartInstance = new Chart(ctxProgress, {
+                type: 'line',
+                data: {
+                    labels: weeks,
+                    datasets: [{
+                        label: '手動調整進度 (%)',
+                        data: progressData,
+                        borderColor: '#4f46e5', // Indigo color
+                        backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.3,
+                        fill: true,
+                        pointBackgroundColor: '#4f46e5',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            min: 0,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) { return value + '%'; }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return ` 週會進度: ${context.parsed.y}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // 2. Blocked Chart (Bar Chart)
+            const ctxBlocked = document.getElementById('blockedChart').getContext('2d');
+            blockedChartInstance = new Chart(ctxBlocked, {
+                type: 'bar',
+                data: {
+                    labels: weeks,
+                    datasets: [{
+                        label: '卡關任務數 (Blocked)',
+                        data: blockedData,
+                        backgroundColor: 'rgba(239, 68, 68, 0.75)', // Rose-Red color
+                        hoverBackgroundColor: '#ef4444',
+                        borderRadius: 6,
+                        borderWidth: 0,
+                        barThickness: 24
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            min: 0,
+                            ticks: {
+                                stepSize: 1
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+}

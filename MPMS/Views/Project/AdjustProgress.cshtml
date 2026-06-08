@@ -1,0 +1,81 @@
+@model MPMS.Models.Project
+@{
+    ViewData["Title"] = "調整專案進度";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-transparent border-0 pt-4 px-4">
+                <h4 class="card-title fw-bold text-dark mb-1">調整專案進度</h4>
+                <p class="text-muted small mb-0">手動輸入此專案的最新進度百分比，並寫下進度異動原因</p>
+            </div>
+            
+            <div class="card-body px-4 pb-4">
+                <hr class="mt-0 mb-4">
+
+                <div class="alert alert-info rounded-3 mb-4" role="alert">
+                    <h6 class="fw-bold mb-1">📢 專案進度說明</h6>
+                    <p class="small mb-0">依據系統設計原則，專案進度不由系統任務公式自動加總，而是由專案 PM 於週會依實務狀況進行評估並手動更新。</p>
+                </div>
+                
+                <form asp-action="AdjustProgress" method="post">
+                    @if (!ViewData.ModelState.IsValid)
+                    {
+                        <div class="alert alert-danger rounded-3" role="alert">
+                            <div asp-validation-summary="All"></div>
+                        </div>
+                    }
+
+                    <input type="hidden" name="projectId" value="@Model.ProjectId" />
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold text-muted">專案名稱</label>
+                        <h5 class="fw-bold text-dark">[@Model.ProjectCode] @Model.ProjectName</h5>
+                    </div>
+
+                    <!-- Progress Percentage -->
+                    <div class="mb-4">
+                        <label for="manualProgressPct" class="form-label fw-semibold">進度百分比 (%)</label>
+                        <div class="row align-items-center g-3">
+                            <div class="col">
+                                <input type="range" class="form-range" min="0" max="100" step="5" id="progressRange" value="@Model.ManualProgressPct.ToString("0")" oninput="updateProgressInput(this.value)">
+                            </div>
+                            <div class="col-auto" style="width: 110px;">
+                                <div class="input-group">
+                                    <input type="number" class="form-control rounded-3 text-center fw-bold" id="manualProgressPct" name="manualProgressPct" min="0" max="100" value="@Model.ManualProgressPct.ToString("0")" oninput="updateProgressRange(this.value)" required />
+                                    <span class="input-group-text bg-light">%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Progress Note / Reason -->
+                    <div class="mb-4">
+                        <label for="progressNote" class="form-label fw-semibold">調整原因 / 進度備註</label>
+                        <textarea id="progressNote" name="progressNote" class="form-control rounded-3" rows="4" placeholder="請輸入本次調整進度的原因或里程碑突破說明..." required>@Model.ProgressNote</textarea>
+                        <div class="form-text">週會時 PM 手動調整進度，必須簡短記錄調整原因。</div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <a href="/Project/Manage" class="btn btn-outline-secondary rounded-3 px-4 py-2">取消</a>
+                        <button type="submit" class="btn btn-primary rounded-3 px-4 py-2">儲存變更</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function updateProgressInput(val) {
+            document.getElementById('manualProgressPct').value = val;
+        }
+        function updateProgressRange(val) {
+            if (val >= 0 && val <= 100) {
+                document.getElementById('progressRange').value = val;
+            }
+        }
+    </script>
+}

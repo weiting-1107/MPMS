@@ -1,0 +1,160 @@
+@model IEnumerable<MPMS.Models.ProjectPhase>
+@{
+    var project = ViewBag.Project as MPMS.Models.Project ?? new MPMS.Models.Project();
+    ViewData["Title"] = $"{project.ProjectName} - 專案階段維護";
+}
+
+<div class="card border-0 shadow-sm rounded-4">
+    <div class="card-header bg-transparent border-0 pt-4 px-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <span class="badge bg-light text-dark border px-2.5 py-1.5 rounded-pill mb-2">@project.ProjectCode</span>
+            <h4 class="card-title fw-bold text-dark mb-1">@project.ProjectName - 專案階段維護</h4>
+            <p class="text-muted small mb-0">管理此專案的各個專案階段、時程範圍與狀態</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/Project/Manage" class="btn btn-outline-secondary rounded-3 px-3 py-2">
+                ⬅️ 返回專案列表
+            </a>
+            <a href="/Project/CreatePhase?projectId=@project.ProjectId" class="btn btn-primary rounded-3 px-3 py-2">
+                ➕ 新增階段
+            </a>
+        </div>
+    </div>
+    
+    <div class="card-body px-4 pb-4">
+        <hr class="mt-0 mb-4">
+        
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 80px;">排序</th>
+                        <th>專案階段名稱</th>
+                        <th>開始日期</th>
+                        <th>結束日期</th>
+                        <th>手動進度 (%)</th>
+                        <th>階段狀態</th>
+                        <th class="text-end" style="width: 250px;">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-muted">
+                                📍 尚未為此專案建立任何專案階段，請點選上方按鈕新增。
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        foreach (var ph in Model)
+                        {
+                            var phTasks = (ViewBag.Tasks as IEnumerable<MPMS.Models.TaskModel> ?? new List<MPMS.Models.TaskModel>()).Where(t => t.PhaseId == ph.PhaseId);
+                            
+                            <tr>
+                                <td class="fw-bold text-secondary text-center">@ph.SortNo</td>
+                                <td class="fw-semibold text-dark">
+                                    <div>@ph.PhaseName</div>
+                                    
+                                    <!-- Tasks under this phase -->
+                                    <div class="mt-3">
+                                        <div class="text-muted small fw-bold mb-1">📋 任務清單 (@phTasks.Count())：</div>
+                                        @if (!phTasks.Any())
+                                        {
+                                            <span class="text-muted x-small">尚無指派任務</span>
+                                        }
+                                        else
+                                        {
+                                            <div class="d-flex flex-column gap-1">
+                                                @foreach (var task in phTasks)
+                                                {
+                                                    <div class="d-flex align-items-center justify-content-between p-2 bg-light rounded-3 small border border-light-subtle">
+                                                        <a href="/Task/Details/@task.TaskId" class="text-decoration-none text-dark fw-semibold small">
+                                                            @task.TaskTitle
+                                                        </a>
+                                                        <div class="d-flex gap-1 align-items-center">
+                                                            <span class="text-muted x-small">👤 @task.OwnerUserName</span>
+                                                            @if (task.TaskStatus == "Todo")
+                                                            {
+                                                                <span class="badge bg-secondary x-small">待處理</span>
+                                                            }
+                                                            else if (task.TaskStatus == "Progress")
+                                                            {
+                                                                <span class="badge bg-primary x-small">進行中</span>
+                                                            }
+                                                            else if (task.TaskStatus == "Blocked")
+                                                            {
+                                                                <span class="badge bg-danger x-small">卡關</span>
+                                                            }
+                                                            else if (task.TaskStatus == "Reviewing")
+                                                            {
+                                                                <span class="badge bg-warning text-dark x-small">審查</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="badge bg-success x-small">完成</span>
+                                                            }
+                                                            <a href="/Task/Edit/@task.TaskId" class="btn btn-xs btn-outline-secondary rounded-2 py-0 px-1 x-small" style="font-size:10px;">✏️ 編輯</a>
+                                                        </div>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                </td>
+                                <td>@ph.StartDate.ToString("yyyy-MM-dd")</td>
+                                <td>@ph.EndDate.ToString("yyyy-MM-dd")</td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="fw-bold text-indigo">@ph.ManualProgressPct.ToString("0")%</span>
+                                        <div class="progress rounded-pill" style="width: 50px; height: 5px;">
+                                            <div class="progress-bar rounded-pill" role="progressbar" style="width: @ph.ManualProgressPct% ; background-color: #6366f1;" aria-valuenow="@ph.ManualProgressPct" aria-valuemin="0" aria-valuemax="100"></div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    @if (ph.PhaseStatus == "Completed")
+                                    {
+                                        <span class="badge bg-success px-2 py-1 rounded-3">已完成 (Completed)</span>
+                                    }
+                                    else if (ph.PhaseStatus == "Active")
+                                    {
+                                        <span class="badge bg-primary px-2 py-1 rounded-3">進行中 (Active)</span>
+                                    }
+                                    else if (ph.PhaseStatus == "Voided")
+                                    {
+                                        <span class="badge bg-danger px-2 py-1 rounded-3">作廢 (Voided)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-light text-dark border px-2 py-1 rounded-3">規劃中 (Planned)</span>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    <div class="btn-group gap-1">
+                                        <a href="/Task/Create?phaseId=@ph.PhaseId" class="btn btn-sm btn-outline-success rounded-2" title="指派新任務">
+                                            ➕ 指派任務
+                                        </a>
+                                        <a href="/Project/EditPhase/@ph.PhaseId" class="btn btn-sm btn-outline-secondary rounded-2">
+                                            ✏️ 編輯
+                                        </a>
+                                        <a href="/Project/AdjustPhaseProgress/@ph.PhaseId" class="btn btn-sm btn-outline-primary rounded-2">
+                                            📈 調整進度
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+    .x-small {
+        font-size: 0.75rem;
+    }
+</style>

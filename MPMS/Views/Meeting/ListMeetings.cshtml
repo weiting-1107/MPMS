@@ -1,0 +1,196 @@
+@model IEnumerable<MPMS.Models.Meeting>
+@{
+    ViewData["Title"] = "週會紀錄列表";
+}
+
+<div class="row mb-4 align-items-center">
+    <div class="col">
+        <h2 class="fw-bold text-dark mb-1">📅 週會控制台</h2>
+        <p class="text-muted mb-0">管理歷次週會投影、臨時 Action Items 及週會進度調整</p>
+    </div>
+    @if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
+    {
+        <div class="col-auto">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createMeetingModal">
+                ➕ 建立新週會
+            </button>
+        </div>
+    }
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show border-0 shadow-sm mb-4" role="alert">
+        🎉 @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show border-0 shadow-sm mb-4" role="alert">
+        ⚠️ @TempData["ErrorMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">週別 (Week)</th>
+                        <th>會議日期</th>
+                        <th>所屬專案</th>
+                        <th>會議主持人</th>
+                        <th>建立時間</th>
+                        <th class="text-end pe-4">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model == null || !Model.Any())
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center py-5 text-muted">
+                                <div class="fs-4 mb-2">📁</div>
+                                目前尚無任何週會紀錄。
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        foreach (var m in Model)
+                        {
+                            <tr>
+                                <td class="ps-4">
+                                    <span class="badge bg-indigo-soft text-indigo font-monospace fs-6">
+                                        @m.MeetingWeek
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold">@m.MeetingDate.ToString("yyyy-MM-dd")</div>
+                                    <small class="text-muted">@m.MeetingDate.ToString("dddd")</small>
+                                </td>
+                                <td>
+                                    @if (m.ProjectId.HasValue)
+                                    {
+                                        <span class="badge bg-primary-soft text-primary">
+                                            @m.ProjectName
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary-soft text-secondary">
+                                            📢 全案週會 (All Projects)
+                                        </span>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="avatar-sm bg-light text-dark rounded-circle me-2 d-flex align-items-center justify-content-center fw-bold" style="width:28px; height:28px; font-size: 0.8rem;">
+                                            @m.HostUserName?.Substring(0, Math.Min(1, m.HostUserName?.Length ?? 0))
+                                        </div>
+                                        <span>@m.HostUserName</span>
+                                    </div>
+                                </td>
+                                <td class="text-muted" style="font-size: 0.9rem;">
+                                    @m.CreatedAt.ToString("yyyy-MM-dd HH:mm")
+                                </td>
+                                <td class="text-end pe-4">
+                                    <a asp-action="Index" asp-route-id="@m.MeetingId" class="btn btn-sm btn-outline-primary px-3 rounded-pill">
+                                        🖥️ 進入週會控制台
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Create Meeting Modal -->
+@if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
+{
+    <div class="modal fade" id="createMeetingModal" tabindex="-1" aria-labelledby="createMeetingModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+                <div class="modal-header border-bottom-0 pb-0">
+                    <h5 class="modal-title fw-bold" id="createMeetingModalLabel">📅 建立新週會</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form asp-action="Create" method="post">
+                    <div class="modal-body py-4">
+                        <div class="mb-3">
+                            <label for="MeetingDate" class="form-label fw-semibold">會議日期</label>
+                            <input type="date" class="form-control" id="MeetingDate" name="MeetingDate" value="@DateTime.Today.ToString("yyyy-MM-dd")" required />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="MeetingWeek" class="form-label fw-semibold">會議週別 (選填)</label>
+                            <input type="text" class="form-control" id="MeetingWeek" name="MeetingWeek" placeholder="例如：2026-W22 (留空將依日期自動計算)" />
+                            <small class="text-muted">若不填寫，系統將會依照 ISO 8601 標準自動以星期一為當週首日計算週別。</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="ProjectId" class="form-label fw-semibold">所屬專案</label>
+                            <select class="form-select" id="ProjectId" name="ProjectId">
+                                <option value="">📢 全案週會 (跨專案焦點)</option>
+                                @if (ViewBag.Projects != null)
+                                {
+                                    foreach (var p in ViewBag.Projects)
+                                    {
+                                        <option value="@p.ProjectId">@p.ProjectName (@p.ProjectCode)</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="HostUserId" class="form-label fw-semibold">會議主持人</label>
+                            <select class="form-select" id="HostUserId" name="HostUserId" required>
+                                @if (ViewBag.Users != null)
+                                {
+                                    foreach (var u in ViewBag.Users)
+                                    {
+                                        if (u.RoleCode == "ADMIN" || u.RoleCode == "PM")
+                                        {
+                                            <option value="@u.UserId">@u.UserName (@u.RoleName)</option>
+                                        }
+                                    }
+                                }
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="MeetingNote" class="form-label fw-semibold">備註或待辦重點 (選填)</label>
+                            <textarea class="form-control" id="MeetingNote" name="MeetingNote" rows="3" placeholder="輸入週會預期檢討的大綱或備註..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-top-0 pt-0">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-primary px-4">確定建立</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    /* Styling for softer badges */
+    .bg-indigo-soft {
+        background-color: rgba(99, 102, 241, 0.1);
+        color: #4f46e5;
+    }
+    .bg-primary-soft {
+        background-color: rgba(13, 110, 253, 0.1);
+        color: #0d6efd;
+    }
+    .bg-secondary-soft {
+        background-color: rgba(108, 117, 125, 0.1);
+        color: #6c757d;
+    }
+</style>
