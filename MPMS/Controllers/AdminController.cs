@@ -163,6 +163,119 @@ namespace MPMS.Controllers
             return View(model);
         }
 
+        // SYS-002: 使用者維護 - 重設密碼 (僅限 Admin)
+        [HttpPost]
+        [Authorize(Roles = "ADMIN")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ResetUserPassword(int userId)
+        {
+            var users = await _userRepository.GetUsersAsync();
+            User? targetUser = null;
+            foreach (var u in users)
+            {
+                if (u.UserId == userId)
+                {
+                    targetUser = u;
+                    break;
+                }
+            }
+
+            if (targetUser == null)
+            {
+                return NotFound();
+            }
+
+            // 預設密碼設定為 Password123
+            string defaultPassword = "Password123";
+            string newHash = _authService.HashPassword(defaultPassword);
+            
+            bool success = await _userRepository.UpdatePasswordAsync(userId, newHash);
+            if (success)
+            {
+                await _auditService.LogAsync(
+                    CurrentUserId, 
+                    "ResetPassword", 
+                    "MPMS_USER", 
+                    userId.ToString(), 
+                    new { Message = "Admin forced password reset" }, 
+                    new { Message = "Password reset to default", DefaultPassword = defaultPassword }
+                );
+                
+                TempData["SuccessMessage"] = $"已成功將使用者 {targetUser.UserName} ({targetUser.Account}) 的密碼還原為系統預設值。";
+            }
+            else
+            {
+                TempData["ErrorMessage"] = "密碼還原失敗，請稍後再試。";
+            }
+
+            return RedirectToAction(nameof(Users));
+        }
+
+        // SYS-002: 使用者維護 - 啟用/停用使用者 (僅限 Admin)
+        [HttpPost]
+        [Authorize(Roles = "ADMIN")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ToggleUserActive(int userId)
+        {
+            // 不允許修改自己
+            if (userId == CurrentUserId)
+            {
+                TempData["ErrorMessage"] = "您無法啟用或停用自己的帳號。";
+                return RedirectToAction(nameof(Users));
+            }
+
+            // 查詢目標使用者
+            var users = await _userRepository.GetUsersAsync();
+            User? targetUser = null;
+            foreach (var u in users)
+            {
+                if (u.UserId == userId) { targetUser = u; break; }
+            }
+
+            if (targetUser == null)
+            {
+                TempData["ErrorMessage"] = "找不到該使用者。";
+                return RedirectToAction(nameof(Users));
+            }
+
+            // 不允許停用其他 ADMIN 帳號
+            if (targetUser.RoleCode == "ADMIN")
+            {
+                TempData["ErrorMessage"] = $"無法停用或啟用系統管理員帳號「{targetUser.Account}」。";
+                return RedirectToAction(nameof(Users));
+            }
+
+            try
+            {
+                bool oldActive = targetUser.IsActive;
+                targetUser.IsActive = !targetUser.IsActive;
+                var success = await _userRepository.UpdateUserAsync(targetUser);
+                if (success)
+                {
+                    string actionVerb = targetUser.IsActive ? "啟用" : "停用";
+                    await _auditService.LogAsync(
+                        CurrentUserId,
+                        "ToggleUserActive",
+                        "MPMS_USER",
+                        userId.ToString(),
+                        new { UserId = userId, Account = targetUser.Account, IsActive = oldActive },
+                        new { UserId = userId, Account = targetUser.Account, IsActive = targetUser.IsActive }
+                    );
+                    TempData["SuccessMessage"] = $"使用者「{targetUser.UserName}（{targetUser.Account}）」已成功{actionVerb}。";
+                }
+                else
+                {
+                    TempData["ErrorMessage"] = "更新使用者狀態失敗，請稍後再試。";
+                }
+            }
+            catch (Exception ex)
+            {
+                TempData["ErrorMessage"] = MPMS.Helpers.DbErrorTranslationHelper.TranslateException(ex, "更新使用者狀態失敗");
+            }
+
+            return RedirectToAction(nameof(Users));
+        }
+
         // SYS-004: 系統稽核日誌查詢 (Admin / PM)
         [Authorize(Roles = "ADMIN,PM")]
         public async Task<IActionResult> AuditLogs()

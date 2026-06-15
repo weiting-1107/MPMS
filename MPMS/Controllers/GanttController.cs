@@ -60,14 +60,16 @@ namespace MPMS.Controllers
             var tasks = await _taskRepository.GetTasksByProjectIdAsync(projectId);
 
             var ganttTasks = new List<object>();
+            var sortedPhases = phases.OrderBy(p => p.SortNo).ToList();
 
-            // 1. Add Phase bars
-            foreach (var phase in phases)
+            foreach (var phase in sortedPhases)
             {
+                // 1. Add Phase bar
                 ganttTasks.Add(new
                 {
                     id = $"phase_{phase.PhaseId}",
                     name = $"【階段】{phase.PhaseName}",
+                    phaseName = phase.PhaseName,
                     start = phase.StartDate.ToString("yyyy-MM-dd"),
                     end = phase.EndDate.ToString("yyyy-MM-dd"),
                     progress = (int)phase.ManualProgressPct,
@@ -76,66 +78,66 @@ namespace MPMS.Controllers
                     type = "phase",
                     realId = phase.PhaseId
                 });
-            }
 
-            // 2. Add Task bars
-            foreach (var task in tasks)
-            {
-                // Retrieve full task details (including predecessor IDs)
-                var fullTask = await _taskRepository.GetTaskByIdAsync(task.TaskId);
-                if (fullTask == null) continue;
+                // 2. Add Task bars belonging to this phase
+                var phaseTasks = tasks.Where(t => t.PhaseId == phase.PhaseId).ToList();
+                foreach (var task in phaseTasks)
+                {
+                    // Retrieve full task details (including predecessor IDs)
+                    var fullTask = await _taskRepository.GetTaskByIdAsync(task.TaskId);
+                    if (fullTask == null) continue;
 
-                // Determine custom styling class based on status/dates
-                var customClassList = new List<string>();
-                if (fullTask.IsMilestone)
-                {
-                    customClassList.Add("gantt-milestone-bar");
-                }
-                else
-                {
-                    switch (fullTask.TaskStatus)
+                    // Determine custom styling class based on status/dates
+                    var customClassList = new List<string>();
+                    if (fullTask.IsMilestone)
                     {
-                        case "Blocked":
-                            customClassList.Add("gantt-blocked-bar");
-                            break;
-                        case "Reviewing":
-                            customClassList.Add("gantt-reviewing-bar");
-                            break;
-                        case "Done":
-                            customClassList.Add("gantt-done-bar");
-                            break;
-                        default:
-                            customClassList.Add("gantt-default-bar");
-                            break;
+                        customClassList.Add("gantt-milestone-bar");
                     }
+                    else
+                    {
+                        switch (fullTask.TaskStatus)
+                        {
+                            case "Blocked":
+                                customClassList.Add("gantt-blocked-bar");
+                                break;
+                            case "Reviewing":
+                                customClassList.Add("gantt-reviewing-bar");
+                                break;
+                            case "Done":
+                                customClassList.Add("gantt-done-bar");
+                                break;
+                            default:
+                                customClassList.Add("gantt-default-bar");
+                                break;
+                        }
+                    }
+
+                    // Check if task is overdue
+                    if (fullTask.TaskStatus != "Done" && fullTask.DueDate < DateTime.Today)
+                    {
+                        customClassList.Add("gantt-overdue-border");
+                    }
+
+                    // Combine predecessor task IDs as dependency strings for Frappe Gantt
+                    var dependencyIds = fullTask.PredecessorTaskIds.Select(id => $"task_{id}").ToList();
+
+                    ganttTasks.Add(new
+                    {
+                        id = $"task_{fullTask.TaskId}",
+                        name = (fullTask.IsMilestone ? "◆ " : "") + $"{fullTask.TaskTitle} ({fullTask.OwnerUserName})",
+                        taskTitle = fullTask.TaskTitle,
+                        start = fullTask.PlannedStartDate?.ToString("yyyy-MM-dd") ?? fullTask.DueDate.AddDays(-7).ToString("yyyy-MM-dd"),
+                        end = fullTask.DueDate.ToString("yyyy-MM-dd"),
+                        progress = fullTask.TaskStatus == "Done" ? 100 : 0,
+                        dependencies = string.Join(",", dependencyIds),
+                        custom_class = string.Join(" ", customClassList),
+                        type = fullTask.IsMilestone ? "milestone" : "task",
+                        realId = fullTask.TaskId,
+                        status = fullTask.TaskStatus,
+                        owner = fullTask.OwnerUserName,
+                        rowVersion = fullTask.RowVersion != null ? Convert.ToBase64String(fullTask.RowVersion) : ""
+                    });
                 }
-
-                // Check if task is overdue
-                if (fullTask.TaskStatus != "Done" && fullTask.DueDate < DateTime.Today)
-                {
-                    customClassList.Add("gantt-overdue-border");
-                }
-
-                // Combine predecessor task IDs as dependency strings for Frappe Gantt
-                var dependencyIds = fullTask.PredecessorTaskIds.Select(id => $"task_{id}").ToList();
-                // Optionally connect task to its Phase bar as dependency so it groups visually
-                // dependencyIds.Insert(0, $"phase_{fullTask.PhaseId}");
-
-                ganttTasks.Add(new
-                {
-                    id = $"task_{fullTask.TaskId}",
-                    name = (fullTask.IsMilestone ? "◆ " : "") + $"{fullTask.TaskTitle} ({fullTask.OwnerUserName})",
-                    start = fullTask.PlannedStartDate?.ToString("yyyy-MM-dd") ?? fullTask.DueDate.AddDays(-7).ToString("yyyy-MM-dd"),
-                    end = fullTask.DueDate.ToString("yyyy-MM-dd"),
-                    progress = fullTask.TaskStatus == "Done" ? 100 : 0,
-                    dependencies = string.Join(",", dependencyIds),
-                    custom_class = string.Join(" ", customClassList),
-                    type = fullTask.IsMilestone ? "milestone" : "task",
-                    realId = fullTask.TaskId,
-                    status = fullTask.TaskStatus,
-                    owner = fullTask.OwnerUserName,
-                    rowVersion = fullTask.RowVersion != null ? Convert.ToBase64String(fullTask.RowVersion) : ""
-                });
             }
 
             return Json(ganttTasks);

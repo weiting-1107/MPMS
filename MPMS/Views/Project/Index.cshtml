@@ -13,7 +13,7 @@
     {
         <div>
             <a href="/Project/Manage" class="btn btn-dark rounded-3 px-4 py-2">
-                ⚙️ 專案管理後台
+                ⚙️ 專案管理
             </a>
         </div>
     }
@@ -46,7 +46,16 @@
                         <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
                             <div>
                                 <span class="badge bg-light text-dark border px-2.5 py-1.5 rounded-pill mb-2">@proj.ProjectCode</span>
-                                <h3 class="fw-bold text-dark mb-1">@proj.ProjectName</h3>
+                                <h3 class="fw-bold mb-1">
+                                    @if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
+                                    {
+                                        <a href="/Project/Phases?projectId=@proj.ProjectId" class="text-dark text-decoration-none" style="transition: color 0.2s ease;" onmouseover="this.style.color='#4f46e5'" onmouseout="this.style.color=''">@proj.ProjectName</a>
+                                    }
+                                    else
+                                    {
+                                        <a href="/Gantt?projectId=@proj.ProjectId" class="text-dark text-decoration-none" style="transition: color 0.2s ease;" onmouseover="this.style.color='#4f46e5'" onmouseout="this.style.color=''">@proj.ProjectName</a>
+                                    }
+                                </h3>
                                 <p class="text-muted small mb-0">
                                     📅 專案期程：@proj.StartDate.ToString("yyyy-MM-dd") ~ @proj.EndDate.ToString("yyyy-MM-dd")
                                     <span class="mx-2">|</span>
@@ -152,18 +161,6 @@
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    }
-                                }
-                            </div>
-                        </div>
-
-                    </div>
-                </div>
-            </div>
-        }
-    }
-</div>         </div>
                                         </div>
                                     }
                                 }

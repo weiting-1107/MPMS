@@ -1,6 +1,23 @@
 @model IEnumerable<MPMS.Models.User>
 @{
     ViewData["Title"] = "使用者管理";
+    var currentUserId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "0");
+}
+
+@* 操作結果訊息 *@
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show rounded-4 mb-4" role="alert">
+        <strong>✨ 成功：</strong>@TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show rounded-4 mb-4" role="alert">
+        <strong>⚠️ 錯誤：</strong>@TempData["ErrorMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
 }
 
 <div class="card border-0 shadow-sm rounded-4">
@@ -36,6 +53,12 @@
                 <tbody>
                     @foreach (var user in Model)
                     {
+                        var isSelf = user.UserId == currentUserId;
+                        var isAdmin = user.RoleCode == "ADMIN";
+                        var canToggle = !isSelf && !isAdmin;
+                        var toggleTooltip = isSelf ? "無法停用或啟用自己的帳號"
+                                           : isAdmin ? "無法停用或啟用系統管理員帳號"
+                                           : (user.IsActive ? "停用此帳號" : "啟用此帳號");
                         <tr>
                             <td class="fw-bold text-secondary">#@user.UserId</td>
                             <td><span class="badge bg-light text-dark border px-2.5 py-1.5 rounded-pill">@user.Account</span></td>
@@ -44,15 +67,15 @@
                             <td>
                                 @if (user.RoleCode == "ADMIN")
                                 {
-                                    <span class="badge bg-danger-subtle text-danger px-2.5 py-1.5 rounded-pill" style="color: #ef4444 !important; background-color: #fee2e2 !important;">系統管理員</span>
+                                    <span class="badge px-2 py-1 rounded-pill" style="color: #ef4444 !important; background-color: #fee2e2 !important;">系統管理員</span>
                                 }
                                 else if (user.RoleCode == "PM")
                                 {
-                                    <span class="badge bg-primary-subtle text-primary px-2.5 py-1.5 rounded-pill" style="color: #3b82f6 !important; background-color: #dbeafe !important;">專案經理</span>
+                                    <span class="badge px-2 py-1 rounded-pill" style="color: #3b82f6 !important; background-color: #dbeafe !important;">專案經理</span>
                                 }
                                 else
                                 {
-                                    <span class="badge bg-success-subtle text-success px-2.5 py-1.5 rounded-pill" style="color: #10b981 !important; background-color: #d1fae5 !important;">一般人員</span>
+                                    <span class="badge px-2 py-1 rounded-pill" style="color: #10b981 !important; background-color: #d1fae5 !important;">一般人員</span>
                                 }
                             </td>
                             <td>
@@ -68,10 +91,59 @@
                             <td class="text-muted small">
                                 @(user.LastLoginAt.HasValue ? user.LastLoginAt.Value.ToString("yyyy-MM-dd HH:mm:ss") : "無登入紀錄")
                             </td>
-                            <td class="text-end">
+                            <td class="text-end text-nowrap">
                                 <a href="/Admin/EditUser/@user.UserId" class="btn btn-sm btn-outline-secondary rounded-2">
-                                    編輯
+                                    <i class="bi bi-pencil-square"></i> 編輯
                                 </a>
+                                <form asp-action="ResetUserPassword" asp-controller="Admin" method="post" class="d-inline"
+                                      onsubmit="return confirm('確定要將使用者「@user.UserName」的密碼強制重設為系統預設值 (Password123) 嗎？');">
+                                    <input type="hidden" name="userId" value="@user.UserId" />
+                                    <button type="submit" class="btn btn-sm btn-outline-warning rounded-2 ms-1">
+                                        <i class="bi bi-key"></i> 重設密碼
+                                    </button>
+                                </form>
+                                @if (canToggle)
+                                {
+                                    @if (user.IsActive)
+                                    {
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-warning rounded-2 ms-1"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#toggleUserModal"
+                                                data-user-id="@user.UserId"
+                                                data-user-name="@user.UserName"
+                                                data-user-account="@user.Account"
+                                                data-user-role="@(user.RoleCode == "PM" ? "專案經理" : "一般人員")"
+                                                data-user-active="@user.IsActive"
+                                                title="@toggleTooltip">
+                                            <i class="bi bi-person-x"></i> 停用
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-success rounded-2 ms-1"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#toggleUserModal"
+                                                data-user-id="@user.UserId"
+                                                data-user-name="@user.UserName"
+                                                data-user-account="@user.Account"
+                                                data-user-role="@(user.RoleCode == "PM" ? "專案經理" : "一般人員")"
+                                                data-user-active="@user.IsActive"
+                                                title="@toggleTooltip">
+                                            <i class="bi bi-person-check"></i> 啟用
+                                        </button>
+                                    }
+                                }
+                                else
+                                {
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-secondary rounded-2 ms-1"
+                                            disabled
+                                            title="@toggleTooltip">
+                                        <i class="bi bi-person-x"></i> 停用
+                                    </button>
+                                }
                             </td>
                         </tr>
                     }
@@ -80,3 +152,94 @@
         </div>
     </div>
 </div>
+
+@* 停用/啟用使用者確認 Modal *@
+<div class="modal fade" id="toggleUserModal" tabindex="-1" aria-labelledby="toggleUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold" id="toggleUserModalLabel">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>確認停用使用者
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-3">
+                <div class="alert border-0 rounded-3" id="modalAlertBox" style="background-color: #fffbeb; color: #78350f;">
+                    <p class="mb-2 fw-semibold">⚠️ 狀態變更提醒</p>
+                    <p class="mb-0 small" id="modalAlertText">停用後，該使用者將無法登入系統，但其所有歷史任務紀錄及操作歷程皆會被保留以供備查。</p>
+                </div>
+                <div class="bg-light rounded-3 p-3 mt-3">
+                    <div class="row g-2 small">
+                        <div class="col-4 text-muted fw-semibold">姓名</div>
+                        <div class="col-8 fw-bold" id="modalUserName"></div>
+                        <div class="col-4 text-muted fw-semibold">帳號</div>
+                        <div class="col-8"><span class="badge bg-secondary rounded-pill" id="modalUserAccount"></span></div>
+                        <div class="col-4 text-muted fw-semibold">角色</div>
+                        <div class="col-8" id="modalUserRole"></div>
+                        <div class="col-4 text-muted fw-semibold">目前狀態</div>
+                        <div class="col-8" id="modalUserStatus"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-outline-secondary rounded-3 px-4" data-bs-dismiss="modal">取消</button>
+                <form id="toggleUserForm" asp-action="ToggleUserActive" asp-controller="Admin" method="post" class="d-inline">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="userId" id="toggleUserId" value="" />
+                    <button type="submit" class="btn rounded-3 px-4" id="modalSubmitBtn">
+                        確認
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // 點擊啟用/停用按鈕時，將使用者資料填入 Modal，並動態更新樣式與內容
+        document.getElementById('toggleUserModal').addEventListener('show.bs.modal', function (event) {
+            const btn = event.relatedTarget;
+            const userId = btn.dataset.userId;
+            const userName = btn.dataset.userName;
+            const userAccount = btn.dataset.userAccount;
+            const userRole = btn.dataset.userRole;
+            const isActive = btn.dataset.userActive === "True"; // Razor serializes bool to "True" or "False"
+
+            document.getElementById('toggleUserId').value = userId;
+            document.getElementById('modalUserName').textContent = userName;
+            document.getElementById('modalUserAccount').textContent = userAccount;
+            document.getElementById('modalUserRole').textContent = userRole;
+
+            const statusBadge = isActive 
+                ? '<span class="badge bg-success rounded-3">使用中</span>' 
+                : '<span class="badge bg-secondary rounded-3">已停用</span>';
+            document.getElementById('modalUserStatus').innerHTML = statusBadge;
+
+            const modalTitle = document.getElementById('toggleUserModalLabel');
+            const submitBtn = document.getElementById('modalSubmitBtn');
+            const alertBox = document.getElementById('modalAlertBox');
+            const alertText = document.getElementById('modalAlertText');
+
+            if (isActive) {
+                // Deactivate Mode
+                modalTitle.className = "modal-title fw-bold text-warning";
+                modalTitle.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i>確認停用使用者';
+                submitBtn.className = "btn btn-warning rounded-3 px-4 text-dark fw-semibold";
+                submitBtn.textContent = "確認停用";
+                alertBox.style.backgroundColor = "#fffbeb";
+                alertBox.style.color = "#78350f";
+                alertText.textContent = "停用後，該使用者將無法登入系統，但其所有歷史任務紀錄及操作歷程皆會被保留以供備查。";
+            } else {
+                // Activate Mode
+                modalTitle.className = "modal-title fw-bold text-success";
+                modalTitle.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>確認啟用使用者';
+                submitBtn.className = "btn btn-success text-white rounded-3 px-4 fw-semibold";
+                submitBtn.textContent = "確認啟用";
+                alertBox.style.backgroundColor = "#f0fdf4";
+                alertBox.style.color = "#15803d";
+                alertText.textContent = "啟用後，該使用者將恢復登入系統與正常操作專案及任務的權限。";
+            }
+        });
+    </script>
+}

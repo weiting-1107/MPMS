@@ -241,49 +241,7 @@
             </div>
         </div>
 
-        <!-- System Quick Actions -->
-        <div class="card border-0 shadow-sm rounded-4">
-            <div class="card-header bg-transparent border-0 pt-4 px-4">
-                <h5 class="card-title fw-bold text-dark mb-0">系統模組導航</h5>
-            </div>
-            <div class="card-body px-4 pb-4">
-                <hr class="mt-2 mb-4">
-                <div class="row g-2">
-                    @if (User.IsInRole("ADMIN"))
-                    {
-                        <div class="col-6">
-                            <a href="/Admin/Users" class="btn btn-outline-primary w-100 py-3 rounded-3 d-flex flex-column align-items-center gap-2 small">
-                                <span class="fs-4">👥</span>
-                                <span>使用者維護</span>
-                            </a>
-                        </div>
-                        <div class="col-6">
-                            <a href="/Admin/AuditLogs" class="btn btn-outline-secondary w-100 py-3 rounded-3 d-flex flex-column align-items-center gap-2 small">
-                                <span class="fs-4">📋</span>
-                                <span>稽核紀錄</span>
-                            </a>
-                        </div>
-                    }
-                    
-                    @if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
-                    {
-                        <div class="col-6">
-                            <a href="/Project/Manage" class="btn btn-outline-dark w-100 py-3 rounded-3 d-flex flex-column align-items-center gap-2 small">
-                                <span class="fs-4">⚙️</span>
-                                <span>專案管理</span>
-                            </a>
-                        </div>
-                    }
-                    
-                    <div class="col-6">
-                        <a href="/Project" class="btn btn-outline-success w-100 py-3 rounded-3 d-flex flex-column align-items-center gap-2 small">
-                            <span class="fs-4">📁</span>
-                            <span>全局專案看板</span>
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
+
 
     </div>
 </div>

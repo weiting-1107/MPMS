@@ -293,6 +293,7 @@
                         <input asp-for="RememberMe" class="form-check-input form-check-input-custom" />
                         <label asp-for="RememberMe" class="form-check-label"></label>
                     </div>
+                    <a href="javascript:void(0);" onclick="alert('若忘記密碼，請直接聯繫系統管理員 (Admin) 為您強制重設密碼。')" style="color: var(--accent-primary); text-decoration: none; font-weight: 500; transition: color 0.2s ease;" onmouseover="this.style.color='var(--accent-secondary)'" onmouseout="this.style.color='var(--accent-primary)'">忘記密碼？</a>
                 </div>
 
                 <button type="submit" class="btn-submit">安全登入</button>

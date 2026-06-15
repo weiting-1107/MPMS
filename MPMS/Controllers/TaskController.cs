@@ -817,5 +817,50 @@ namespace MPMS.Controllers
 
             return RedirectToAction(nameof(Details), new { id = taskId });
         }
+
+        // TSK-DEL: 刪除任務 (僅限 Admin / PM)
+        [HttpPost]
+        [Authorize(Roles = "ADMIN,PM")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteTask(int taskId)
+        {
+            var task = await _taskRepository.GetTaskByIdAsync(taskId);
+            if (task == null)
+            {
+                TempData["ErrorMessage"] = "找不到該任務。";
+                return RedirectToAction(nameof(Details), new { id = taskId });
+            }
+
+            int projectId = task.ProjectId;
+
+            try
+            {
+                var success = await _taskRepository.DeleteTaskAsync(taskId);
+                if (success)
+                {
+                    await _auditService.LogAsync(
+                        CurrentUserId,
+                        "DeleteTask",
+                        "MPMS_TASK",
+                        taskId.ToString(),
+                        task,
+                        null
+                    );
+                    TempData["SuccessMessage"] = $"任務「{task.TaskTitle}」已成功刪除。";
+                }
+                else
+                {
+                    TempData["ErrorMessage"] = "刪除任務失敗，請稍後再試。";
+                    return RedirectToAction(nameof(Details), new { id = taskId });
+                }
+            }
+            catch (Exception ex)
+            {
+                TempData["ErrorMessage"] = MPMS.Helpers.DbErrorTranslationHelper.TranslateException(ex, "刪除任務失敗");
+                return RedirectToAction(nameof(Details), new { id = taskId });
+            }
+
+            return RedirectToAction("Phases", "Project", new { projectId });
+        }
     }
 }

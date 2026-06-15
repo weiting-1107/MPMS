@@ -55,3 +55,12 @@ Thumbs.db
 
 # Project specific upload files (Exclude locally uploaded attachments)
 **/wwwroot/uploads/
+
+# Temporary and local test files in root
+/test.js
+/test.py
+/frappe-gantt.css
+/other/
+/publish/
+/*.txt
+

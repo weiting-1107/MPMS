@@ -110,6 +110,30 @@ namespace MPMS.Repositories
 
         // ==================== Weekly Dashboard Queries ====================
 
+        // Get tasks for 3 weeks range (last week, this week, next week)
+        public async Task<IEnumerable<TaskModel>> GetTasksForThreeWeeksAsync(DateTime startOfWeek, DateTime endOfWeek, int? projectId)
+        {
+            var startOfThreeWeeks = startOfWeek.AddDays(-7);
+            var endOfThreeWeeks = endOfWeek.AddDays(7);
+
+            const string sql = @"
+                SELECT t.*, ph.phase_name as PhaseName, p.project_name as ProjectName, p.project_id as ProjectId, u.user_name as OwnerUserName
+                FROM dbo.MPMS_TASK t
+                INNER JOIN dbo.MPMS_PROJECT_PHASE ph ON t.phase_id = ph.phase_id
+                INNER JOIN dbo.MPMS_PROJECT p ON ph.project_id = p.project_id
+                INNER JOIN dbo.MPMS_USER u ON t.owner_user_id = u.user_id
+                WHERE t.task_status != 'Voided'
+                  AND (
+                        (t.planned_start_date IS NOT NULL AND t.planned_start_date <= @EndOfThreeWeeks AND t.due_date >= @StartOfThreeWeeks)
+                        OR (t.planned_start_date IS NULL AND t.due_date >= @StartOfThreeWeeks AND t.due_date <= @EndOfThreeWeeks)
+                      )
+                  AND (@ProjectId IS NULL OR p.project_id = @ProjectId)
+                ORDER BY t.due_date ASC";
+
+            using var conn = CreateConnection();
+            return await conn.QueryAsync<TaskModel>(sql, new { StartOfThreeWeeks = startOfThreeWeeks, EndOfThreeWeeks = endOfThreeWeeks, ProjectId = projectId });
+        }
+
         // 1. 本週截止任務 (Due This Week)
         public async Task<IEnumerable<TaskModel>> GetTasksDueThisWeekAsync(DateTime startOfWeek, DateTime endOfWeek, int? projectId)
         {
@@ -290,5 +314,48 @@ namespace MPMS.Repositories
                 throw;
             }
         }
+
+        // Delete meeting (cascades to action items and snapshots)
+        public async Task<bool> DeleteMeetingAsync(int meetingId)
+        {
+            using var conn = CreateConnection();
+            conn.Open();
+            using var trans = conn.BeginTransaction();
+            try
+            {
+                // 1. 斷開所有指向即將刪除快照的 parent_snapshot_id 參照以及即將刪除的快照自身的參照，避免違反 FK_MPMS_WEEKLY_SNAPSHOT_PARENT
+                await conn.ExecuteAsync(
+                    @"UPDATE dbo.MPMS_WEEKLY_SNAPSHOT
+                      SET parent_snapshot_id = NULL
+                      WHERE parent_snapshot_id IN (
+                          SELECT snapshot_id FROM dbo.MPMS_WEEKLY_SNAPSHOT WHERE meeting_id = @MeetingId
+                      ) OR meeting_id = @MeetingId",
+                    new { MeetingId = meetingId }, transaction: trans);
+
+                // 2. 刪除關聯快照 (快照子項目由 CASCADE 自動刪除)
+                await conn.ExecuteAsync(
+                    "DELETE FROM dbo.MPMS_WEEKLY_SNAPSHOT WHERE meeting_id = @MeetingId",
+                    new { MeetingId = meetingId }, transaction: trans);
+
+                // 3. 刪除 Action Items（無 CASCADE，需手動刪）
+                await conn.ExecuteAsync(
+                    "DELETE FROM dbo.MPMS_MEETING_ACTION WHERE meeting_id = @MeetingId",
+                    new { MeetingId = meetingId }, transaction: trans);
+
+                // 4. 刪除週會本身
+                var rows = await conn.ExecuteAsync(
+                    "DELETE FROM dbo.MPMS_MEETING WHERE meeting_id = @MeetingId",
+                    new { MeetingId = meetingId }, transaction: trans);
+
+                trans.Commit();
+                return rows > 0;
+            }
+            catch
+            {
+                trans.Rollback();
+                throw;
+            }
+        }
+
     }
 }

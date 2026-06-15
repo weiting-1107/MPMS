@@ -117,6 +117,7 @@ namespace MPMS.Controllers
             var tasksCompleted = await _meetingRepository.GetTasksCompletedThisWeekAsync(startOfWeek, endOfWeek, meeting.ProjectId);
             var attachments = await _meetingRepository.GetAttachmentWallAsync(startOfWeek, endOfWeek, meeting.ProjectId);
             var actionItems = await _meetingRepository.GetMeetingActionsAsync(meeting.MeetingId);
+            var focalTasks = await _meetingRepository.GetTasksForThreeWeeksAsync(startOfWeek, endOfWeek, meeting.ProjectId);
 
             var activeUsers = await _taskRepository.GetActiveUsersAsync();
             var allProjects = await _projectRepository.GetProjectsAsync();
@@ -131,6 +132,7 @@ namespace MPMS.Controllers
             ViewBag.TasksCompleted = tasksCompleted;
             ViewBag.Attachments = attachments;
             ViewBag.ActionItems = actionItems;
+            ViewBag.FocalTasks = focalTasks;
 
             ViewBag.Users = activeUsers;
             ViewBag.AllProjects = allProjects;
@@ -324,7 +326,7 @@ namespace MPMS.Controllers
             }
             catch (Exception ex)
             {
-                TempData["ErrorMessage"] = $"現場退回發生錯誤：{ex.Message}";
+                TempData["ErrorMessage"] = MPMS.Helpers.DbErrorTranslationHelper.TranslateException(ex, "現場退回發生錯誤");
             }
 
             return RedirectToAction(nameof(Index), new { id = meetingId });
@@ -339,12 +341,6 @@ namespace MPMS.Controllers
             var meeting = await _meetingRepository.GetMeetingByIdAsync(meetingId);
             if (meeting == null) return NotFound();
 
-            if (!meeting.ProjectId.HasValue)
-            {
-                TempData["ErrorMessage"] = "建立快照失敗！此會議未關聯特定專案，無法封存專案快照。";
-                return RedirectToAction(nameof(Index), new { id = meetingId });
-            }
-
             var hasExisting = await _snapshotRepository.CheckSnapshotExistsAsync(meetingId);
             if (hasExisting && string.IsNullOrWhiteSpace(revisionReason))
             {
@@ -354,38 +350,69 @@ namespace MPMS.Controllers
 
             try
             {
-                var snapshotId = await _snapshotRepository.SealSnapshotAsync(
-                    meetingId,
-                    meeting.ProjectId.Value,
-                    CurrentUserId,
-                    revisionReason
-                );
+                var targetProjects = new System.Collections.Generic.List<Project>();
+                if (meeting.ProjectId.HasValue)
+                {
+                    var p = await _projectRepository.GetProjectByIdAsync(meeting.ProjectId.Value);
+                    if (p != null) targetProjects.Add(p);
+                }
+                else
+                {
+                    var allP = await _projectRepository.GetProjectsAsync();
+                    targetProjects.AddRange(allP);
+                }
 
-                if (snapshotId > 0)
+                if (!targetProjects.Any())
+                {
+                    TempData["ErrorMessage"] = "目前系統中沒有可封存的專案。";
+                    return RedirectToAction(nameof(Index), new { id = meetingId });
+                }
+
+                int sealedCount = 0;
+                foreach (var project in targetProjects)
+                {
+                    var snapshotId = await _snapshotRepository.SealSnapshotAsync(
+                        meetingId,
+                        project.ProjectId,
+                        CurrentUserId,
+                        revisionReason,
+                        meetingDate: meeting.MeetingDate  // 用週會日期決定 week_code
+                    );
+
+                    if (snapshotId > 0)
+                    {
+                        sealedCount++;
+                        var projVersion = await _snapshotRepository.GetLatestSnapshotVersionAsync(meetingId);
+
+                        await _auditService.LogAsync(
+                            CurrentUserId,
+                            "SealSnapshot",
+                            "MPMS_WEEKLY_SNAPSHOT",
+                            snapshotId.ToString(),
+                            null,
+                            new { meeting_id = meetingId, snapshot_id = snapshotId, project_id = project.ProjectId, is_revision = hasExisting }
+                        );
+                    }
+                }
+
+                if (sealedCount > 0)
                 {
                     var version = await _snapshotRepository.GetLatestSnapshotVersionAsync(meetingId);
 
-                    await _auditService.LogAsync(
-                        CurrentUserId,
-                        "SealSnapshot",
-                        "MPMS_WEEKLY_SNAPSHOT",
-                        snapshotId.ToString(),
-                        null,
-                        new { meeting_id = meetingId, snapshot_id = snapshotId, version = version, is_revision = hasExisting }
-                    );
-
                     // Send notifications (In-app only)
                     var activeUsers = await _taskRepository.GetActiveUsersAsync();
-                    var project = meeting.ProjectId.HasValue 
-                        ? await _projectRepository.GetProjectByIdAsync(meeting.ProjectId.Value) 
-                        : null;
-
-                    var notifyUserIds = new HashSet<int>();
+                    var notifyUserIds = new System.Collections.Generic.HashSet<int>();
                     notifyUserIds.Add(CurrentUserId);
-                    if (project != null)
+                    
+                    if (meeting.ProjectId.HasValue)
                     {
-                        notifyUserIds.Add(project.PmUserId);
+                        notifyUserIds.Add(targetProjects.First().PmUserId);
                     }
+                    else
+                    {
+                        foreach (var p in targetProjects) notifyUserIds.Add(p.PmUserId);
+                    }
+
                     foreach (var u in activeUsers)
                     {
                         if (u.RoleCode == "ADMIN")
@@ -413,17 +440,17 @@ namespace MPMS.Controllers
                     }
 
                     TempData["SuccessMessage"] = hasExisting
-                        ? $"已成功封存週快照修正版 (v{version})！"
-                        : "已成功封存當週週會快照！";
+                        ? $"已成功為 {sealedCount} 個專案封存週快照修正版 (v{version})！"
+                        : $"已成功為 {sealedCount} 個專案封存當週週會快照！";
                 }
                 else
                 {
-                    TempData["ErrorMessage"] = "快照封存失敗。";
+                    TempData["ErrorMessage"] = "快照封存失敗，無任何專案被處理。";
                 }
             }
             catch (Exception ex)
             {
-                TempData["ErrorMessage"] = $"快照封存發生錯誤：{ex.Message}";
+                TempData["ErrorMessage"] = MPMS.Helpers.DbErrorTranslationHelper.TranslateException(ex, "快照封存發生錯誤");
             }
 
             return RedirectToAction(nameof(Index), new { id = meetingId });
@@ -486,6 +513,47 @@ namespace MPMS.Controllers
         {
             var phases = await _projectPhaseRepository.GetPhasesByProjectIdAsync(projectId);
             return Json(phases.Select(p => new { phaseId = p.PhaseId, phaseName = p.PhaseName }));
+        }
+
+        // POST: Meeting/DeleteMeeting
+        [HttpPost]
+        [Authorize(Roles = "ADMIN,PM")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteMeeting(int meetingId)
+        {
+            var meeting = await _meetingRepository.GetMeetingByIdAsync(meetingId);
+            if (meeting == null)
+            {
+                TempData["ErrorMessage"] = "找不到該週會記錄。";
+                return RedirectToAction(nameof(ListMeetings));
+            }
+
+            try
+            {
+                var success = await _meetingRepository.DeleteMeetingAsync(meetingId);
+                if (success)
+                {
+                    await _auditService.LogAsync(
+                        CurrentUserId,
+                        "DeleteMeeting",
+                        "MPMS_MEETING",
+                        meetingId.ToString(),
+                        meeting,
+                        null
+                    );
+                    TempData["SuccessMessage"] = $"週會「{meeting.MeetingWeek}」已成功刪除。";
+                }
+                else
+                {
+                    TempData["ErrorMessage"] = "刪除週會失敗，請稍後再試。";
+                }
+            }
+            catch (Exception ex)
+            {
+                TempData["ErrorMessage"] = MPMS.Helpers.DbErrorTranslationHelper.TranslateException(ex, "刪除週會失敗");
+            }
+
+            return RedirectToAction(nameof(ListMeetings));
         }
 
         // ==================== Helper Methods ====================

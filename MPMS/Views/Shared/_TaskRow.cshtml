@@ -1,6 +1,6 @@
 @model MPMS.Models.TaskModel
 
-<tr>
+<tr class="global-task-row" data-project="@Model.ProjectId">
     <td>
         <a href="/Task/Details/@Model.TaskId" class="fw-bold text-dark text-decoration-none">
             @Model.TaskTitle

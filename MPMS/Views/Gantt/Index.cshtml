@@ -1,7 +1,8 @@
 @model MPMS.Models.Project
 @{
-    ViewData["Title"] = $"【甘特圖】{ViewBag.Project.ProjectName}";
     var project = ViewBag.Project as MPMS.Models.Project;
+    if (project == null) { Context.Response.Redirect("/Project/Manage"); return; }
+    ViewData["Title"] = $"【甘特圖】{project.ProjectName}";
     var isPmOrAdmin = User.IsInRole("ADMIN") || User.IsInRole("PM");
 }
 
@@ -40,7 +41,9 @@
         fill: #64748b !important;
     }
     .gantt .gantt-blocked-bar .bar {
-        fill: #ef4444 !important;
+        fill: #e2e8f0 !important;
+        stroke: #dc2626 !important;
+        stroke-width: 3px !important;
     }
     .gantt .gantt-reviewing-bar .bar {
         fill: #3b82f6 !important;
@@ -48,14 +51,30 @@
     .gantt .gantt-done-bar .bar {
         fill: #10b981 !important;
     }
+    .gantt .gantt-done-bar .bar-progress {
+        fill: #10b981 !important;
+    }
     .gantt .gantt-milestone-bar .bar {
         fill: #f59e0b !important;
     }
     
-    /* Overdue highlight border */
+    /* Overdue highlight fill */
     .gantt .gantt-overdue-border .bar {
-        stroke: #dc2626 !important;
-        stroke-width: 3px !important;
+        fill: #ef4444 !important;
+    }
+
+    /* Make tasks clickable */
+    .gantt .bar-wrapper {
+        cursor: pointer;
+    }
+    .gantt .gantt-phase-bar {
+        cursor: default !important;
+    }
+    .gantt .gantt-phase-bar .bar {
+        cursor: default !important;
+    }
+    .gantt .handle {
+        cursor: ew-resize !important;
     }
 
     /* Gantt grid and text styling */
@@ -81,6 +100,34 @@
     .gantt .handle {
         fill: #94a3b8 !important;
     }
+
+    /* Fix Frappe Gantt Popup squished width issue */
+    .gantt .popup-wrapper {
+        min-width: 250px !important;
+        width: max-content !important;
+        white-space: nowrap !important;
+    }
+
+    /* Left Table Row Hover */
+    .task-left-row-hover:hover {
+        background-color: #f1f5f9 !important;
+    }
+
+    /* Hide scrollbar for left table but allow scrolling */
+    #left-table-body::-webkit-scrollbar {
+        display: none;
+    }
+    #left-table-body {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+        overflow-y: auto;
+    }
+
+    /* Force inner gantt container to fill height */
+    .gantt-container {
+        height: 100%;
+        overflow: auto;
+    }
 </style>
 
 <div class="container-fluid py-4">
@@ -89,13 +136,20 @@
         <div>
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb mb-1">
-                    <li class="breadcrumb-item"><a href="/Project/Manage" class="text-blue-400 text-decoration-none">專案管理</a></li>
+                    @if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
+                    {
+                        <li class="breadcrumb-item"><a href="/Project/Manage" class="text-blue-400 text-decoration-none">專案管理</a></li>
+                    }
+                    else
+                    {
+                        <li class="breadcrumb-item"><a href="/Project" class="text-blue-400 text-decoration-none">全局專案看板</a></li>
+                    }
                     <li class="breadcrumb-item active text-slate-300" aria-current="page">甘特圖時程檢視</li>
                 </ol>
             </nav>
-            <h2 class="fw-bold mb-0 text-white d-flex align-items-center gap-2">
+            <h2 class="fw-bold mb-0 text-white" style="word-break: break-all; line-height: 1.5;">
                 📊 @project.ProjectName
-                <span class="badge bg-primary fs-6">@project.ProjectStatus</span>
+                <span class="badge bg-primary fs-6 align-middle ms-2">@project.ProjectStatus</span>
             </h2>
             <p class="text-slate-400 small mb-0 mt-1">
                 📅 專案期間：@project.StartDate.ToString("yyyy-MM-dd") ~ @project.EndDate.ToString("yyyy-MM-dd") 
@@ -138,28 +192,60 @@
                         <label class="form-check-label small fw-bold text-muted" for="milestoneOnly">僅顯示里程碑</label>
                     </div>
                 </div>
+                <div class="pt-3 ms-2">
+                    <div class="form-check form-switch d-inline-block me-3">
+                        <input class="form-check-input" type="checkbox" id="showOwner" checked>
+                        <label class="form-check-label small fw-bold text-muted" for="showOwner">顯示主辦人</label>
+                    </div>
+                    <div class="form-check form-switch d-inline-block me-3">
+                        <input class="form-check-input" type="checkbox" id="showPeriod">
+                        <label class="form-check-label small fw-bold text-muted" for="showPeriod">顯示期間</label>
+                    </div>
+                    <div class="form-check form-switch d-inline-block">
+                        <input class="form-check-input" type="checkbox" id="showDays" checked>
+                        <label class="form-check-label small fw-bold text-muted" for="showDays">顯示天數</label>
+                    </div>
+                </div>
             </div>
 
             <!-- View scale selector -->
             <div>
                 <label class="form-label small text-muted mb-1 d-block fw-bold text-end">視圖縮放</label>
                 <div class="btn-group view-btn-group" role="group">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="changeViewMode('Quarter Day')">6小時</button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="changeViewMode('Half Day')">半天</button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary active" onclick="changeViewMode('Day')">天</button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="changeViewMode('Week')">週</button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="changeViewMode('Month')">月</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-mode="Quarter Day" onclick="changeViewMode('Quarter Day')">6小時</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-mode="Half Day" onclick="changeViewMode('Half Day')">半天</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-mode="Day" onclick="changeViewMode('Day')">天</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-mode="Week" onclick="changeViewMode('Week')">週</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary active" data-mode="Month" onclick="changeViewMode('Month')">月</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Gantt Chart SVG Area -->
+    <!-- Gantt Chart Area with Left Table -->
     <div class="card border-0 shadow-sm rounded-3 mb-4">
-        <div class="card-body p-0">
-            <div id="gantt-container" class="overflow-auto p-3" style="min-height: 500px; background-color: #fafafa;">
+        <div class="card-body p-0 d-flex position-relative border" style="height: 600px; background-color: #ffffff; overflow: hidden;">
+            
+            <!-- Left Side Table (Fixed Width) -->
+            <div class="border-end d-flex flex-column" style="width: 380px; flex-shrink: 0; z-index: 10; background-color: #fafafa; min-height: 0;">
+                <!-- Header (Must match Gantt's actual first row Y offset = 59px exactly to align) -->
+                <div class="border-bottom d-flex align-items-center px-3 fw-bold text-muted" style="height: 59px; flex-shrink: 0; font-size: 0.85rem; background-color: #f1f5f9; box-sizing: border-box;">
+                    <div class="flex-grow-1 text-truncate">任務 / 階段名稱</div>
+                    <div id="header-owner" style="width: 70px;" class="flex-shrink-0">主辦人</div>
+                    <div id="header-period" style="width: 100px; display: none;" class="flex-shrink-0">期間</div>
+                    <div id="header-days" style="width: 60px;" class="text-end flex-shrink-0">天數</div>
+                </div>
+                <!-- Rows Body (Scroll synced) -->
+                <div id="left-table-body" style="overflow-y: auto; overflow-x: hidden; flex-grow: 1; min-height: 0; height: 0;">
+                    <!-- Rendered by JS -->
+                </div>
+            </div>
+
+            <!-- Gantt Chart SVG Area -->
+            <div id="gantt-container" class="flex-grow-1" style="height: 100%; position: relative; background-color: #ffffff; min-height: 0; min-width: 0; overflow: hidden;">
                 <svg id="gantt-chart-svg"></svg>
             </div>
+            
         </div>
     </div>
 
@@ -174,8 +260,8 @@
             <span class="small fw-semibold text-muted">Todo / Progress</span>
         </div>
         <div class="d-flex align-items-center gap-2">
-            <span class="d-inline-block rounded" style="width: 20px; height: 12px; background-color: #ef4444;"></span>
-            <span class="small fw-semibold text-muted">卡關中 (Blocked)</span>
+            <span class="d-inline-block rounded border border-danger border-2" style="width: 20px; height: 12px; background-color: #e2e8f0;"></span>
+            <span class="small fw-semibold text-muted">卡關中 (紅粗框)</span>
         </div>
         <div class="d-flex align-items-center gap-2">
             <span class="d-inline-block rounded" style="width: 20px; height: 12px; background-color: #3b82f6;"></span>
@@ -190,8 +276,8 @@
             <span class="small fw-semibold text-muted">里程碑任務</span>
         </div>
         <div class="d-flex align-items-center gap-2">
-            <span class="d-inline-block rounded border border-danger border-2" style="width: 20px; height: 12px; background-color: #e2e8f0;"></span>
-            <span class="small fw-semibold text-muted">逾期任務 (紅粗框)</span>
+            <span class="d-inline-block rounded" style="width: 20px; height: 12px; background-color: #ef4444;"></span>
+            <span class="small fw-semibold text-muted">逾期任務 (紅色)</span>
         </div>
     </div>
 </div>
@@ -252,12 +338,14 @@
 <script>
     let rawGanttData = [];
     let ganttInstance = null;
-    let currentViewMode = 'Day';
+    let currentViewMode = 'Month';
     const isPmOrAdmin = @(isPmOrAdmin ? "true" : "false");
     
     // Date update temp storage
     let tempUpdateParams = null;
     let tempOriginalTask = null;
+
+    let currentHoveredBarId = null;
 
     document.addEventListener("DOMContentLoaded", function () {
         loadGanttData();
@@ -265,6 +353,37 @@
         // Register filter listeners
         document.getElementById("statusFilter").addEventListener("change", renderFilteredGantt);
         document.getElementById("milestoneOnly").addEventListener("change", renderFilteredGantt);
+        document.getElementById("showOwner").addEventListener("change", renderFilteredGantt);
+        document.getElementById("showPeriod").addEventListener("change", renderFilteredGantt);
+        document.getElementById("showDays").addEventListener("change", renderFilteredGantt);
+
+        // Bind hover events for Gantt chart bars
+        document.addEventListener('mouseover', function(e) {
+            if (!ganttInstance) return;
+            const wrapper = e.target.closest('#gantt-chart-svg .bar-wrapper');
+            if (wrapper) {
+                const id = wrapper.getAttribute('data-id');
+                if (currentHoveredBarId !== id) {
+                    currentHoveredBarId = id;
+                    const bar = ganttInstance.get_bar(id);
+                    if (bar) {
+                        bar.show_popup();
+                    }
+                }
+            }
+        });
+
+        document.addEventListener('mouseout', function(e) {
+            if (!ganttInstance) return;
+            const wrapper = e.target.closest('#gantt-chart-svg .bar-wrapper');
+            if (wrapper) {
+                const relatedTarget = e.relatedTarget;
+                if (!relatedTarget || !wrapper.contains(relatedTarget)) {
+                    currentHoveredBarId = null;
+                    ganttInstance.hide_popup();
+                }
+            }
+        });
     });
 
     function loadGanttData() {
@@ -280,9 +399,40 @@
             });
     }
 
+    function getWorkDays(startStr, endStr, isMilestone) {
+        if (isMilestone) return 0;
+        const start = new Date(startStr);
+        const end = new Date(endStr);
+        if (isNaN(start) || isNaN(end)) return 0;
+        if (start > end) return 0;
+        
+        let count = 0;
+        let cur = new Date(start);
+        cur.setHours(0, 0, 0, 0);
+        const targetEnd = new Date(end);
+        targetEnd.setHours(0, 0, 0, 0);
+
+        while (cur <= targetEnd) {
+            const dayOfWeek = cur.getDay();
+            if (dayOfWeek !== 0 && dayOfWeek !== 6) { // 0 = Sunday, 6 = Saturday
+                count++;
+            }
+            cur.setDate(cur.getDate() + 1);
+        }
+        return count;
+    }
+
     function renderFilteredGantt() {
         const statusVal = document.getElementById("statusFilter").value;
         const milestoneOnly = document.getElementById("milestoneOnly").checked;
+        const showOwner = document.getElementById("showOwner").checked;
+        const showPeriod = document.getElementById("showPeriod").checked;
+        const showDays = document.getElementById("showDays").checked;
+
+        // Setup left table headers
+        document.getElementById('header-owner').style.display = showOwner ? 'block' : 'none';
+        document.getElementById('header-period').style.display = showPeriod ? 'block' : 'none';
+        document.getElementById('header-days').style.display = showDays ? 'block' : 'none';
 
         // Filter algorithm
         let filtered = rawGanttData.filter(item => {
@@ -298,6 +448,94 @@
             }
             return true;
         });
+
+        // Clean names for SVG and populate left table
+        filtered = filtered.map(item => {
+            let baseName = "";
+            if (item.type === 'phase') {
+                baseName = item.phaseName ? `【階段】${item.phaseName}` : item.name.split(' (')[0];
+            } else {
+                baseName = item.taskTitle || item.name.split(' (')[0];
+                if (item.type === 'milestone' && !baseName.startsWith('◆ ')) {
+                    baseName = '◆ ' + baseName;
+                }
+            }
+
+            return {
+                ...item,
+                name: baseName, // SVG only displays clean name
+                cleanName: baseName
+            };
+        });
+
+        // Build Left Table
+        const leftBody = document.getElementById('left-table-body');
+        leftBody.innerHTML = '';
+        
+        filtered.forEach((item) => {
+            const row = document.createElement('div');
+            // Height 38px exactly matches Frappe Gantt's default row height (bar 20 + padding 18)
+            row.style.height = '38px';
+            row.className = 'd-flex align-items-center px-3 border-bottom small';
+            row.style.boxSizing = 'border-box';
+            
+            if (item.type === 'phase') {
+                row.style.backgroundColor = '#f8fafc';
+                row.style.fontWeight = 'bold';
+            } else {
+                row.style.backgroundColor = '#ffffff';
+                row.style.cursor = 'pointer';
+                row.classList.add('task-left-row-hover'); 
+            }
+            
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'flex-grow-1 text-truncate pe-2';
+            nameDiv.title = item.cleanName;
+            if(item.type !== 'phase') {
+                nameDiv.style.paddingLeft = '15px';
+            }
+            nameDiv.textContent = item.cleanName;
+            row.appendChild(nameDiv);
+
+            if (showOwner) {
+                const ownerDiv = document.createElement('div');
+                ownerDiv.className = 'text-truncate text-muted flex-shrink-0';
+                ownerDiv.style.width = '70px';
+                ownerDiv.textContent = item.type === 'phase' ? '' : (item.owner || '');
+                row.appendChild(ownerDiv);
+            }
+            
+            if (showPeriod) {
+                const periodDiv = document.createElement('div');
+                periodDiv.className = 'text-truncate text-muted flex-shrink-0';
+                periodDiv.style.width = '100px';
+                periodDiv.textContent = item.type === 'phase' ? '' : `${item.start.substring(5)} ~ ${item.end.substring(5)}`;
+                row.appendChild(periodDiv);
+            }
+
+            if (showDays) {
+                const daysDiv = document.createElement('div');
+                daysDiv.className = 'text-truncate text-muted text-end flex-shrink-0';
+                daysDiv.style.width = '60px';
+                const days = getWorkDays(item.start, item.end, item.type === 'milestone');
+                daysDiv.textContent = item.type === 'phase' ? '' : `${days}天`;
+                row.appendChild(daysDiv);
+            }
+
+            if(item.type !== 'phase') {
+                row.addEventListener('click', () => {
+                    window.location.href = `/Task/Details/${item.realId}`;
+                });
+            }
+
+            leftBody.appendChild(row);
+        });
+
+        // Add spacer to match Frappe Gantt's extra bottom SVG height (padding 18 + 100)
+        const spacer = document.createElement('div');
+        spacer.style.height = '118px';
+        leftBody.appendChild(spacer);
+
 
         // If a phase has no tasks left after filtering, we can optionally hide it or keep it.
         // Let's keep all phases to show layout.
@@ -316,29 +554,34 @@
             view_modes: ['Quarter Day', 'Half Day', 'Day', 'Week', 'Month'],
             view_mode: currentViewMode,
             language: 'zh',
+            popup_trigger: 'none',
             custom_popup_html: function(task) {
+                // Remove the dynamic suffix like "(2026...)" for a clean title
+                const cleanName = task.name.split(' (')[0];
+                
                 if (task.type === 'phase') {
                     return `
-                        <div class="details-container p-2 small">
-                            <h6 class="fw-bold mb-1">${task.name}</h6>
-                            <p class="mb-0">進度: ${task.progress}%</p>
-                            <p class="mb-0">期間: ${task.start} 至 ${task.end}</p>
+                        <div class="details-container p-2 text-white" style="min-width: 180px; text-align: left;">
+                            <h6 class="fw-bold mb-2 border-bottom border-secondary pb-1">${cleanName}</h6>
+                            <p class="mb-1 small text-info">📍 專案階段</p>
+                            <p class="mb-1 small">🚀 進度: <strong>${task.progress}%</strong></p>
+                            <p class="mb-0 small text-light">📅 期間: ${task.start} ~ ${task.end}</p>
                         </div>
                     `;
                 }
                 return `
-                    <div class="details-container p-2 small" style="min-width: 200px;">
-                        <h6 class="fw-bold mb-1">${task.name}</h6>
-                        <p class="mb-1">主辦人: <span class="badge bg-light text-dark">${task.owner}</span></p>
-                        <p class="mb-1">狀態: <span class="badge bg-secondary">${task.status}</span></p>
-                        <p class="mb-0">期間: ${task.start} 至 ${task.end}</p>
-                        <div class="mt-2 text-center">
-                            <a href="/Task/Details/${task.realId}" class="btn btn-xs btn-primary text-white py-0.5 px-2 rounded small" style="font-size: 10px;">
-                                檢視任務詳情
-                            </a>
-                        </div>
+                    <div class="details-container p-2 text-white" style="min-width: 200px; text-align: left;">
+                        <h6 class="fw-bold mb-2 border-bottom border-secondary pb-1">${cleanName}</h6>
+                        <p class="mb-1 small">👤 主辦人: <span class="text-warning">${task.owner || '未指派'}</span></p>
+                        <p class="mb-1 small">📌 狀態: <span class="text-info">${task.status}</span></p>
+                        <p class="mb-0 small text-light">📅 期間: ${task.start} ~ ${task.end}</p>
                     </div>
                 `;
+            },
+            on_click: function(task) {
+                if (task.type !== 'phase') {
+                    window.location.href = `/Task/Details/${task.realId}`;
+                }
             },
             on_date_change: function(task, start, end) {
                 if (!isPmOrAdmin) {
@@ -370,6 +613,105 @@
                 loadGanttData();
             }
         });
+
+        // Reposition labels outside/to the right of bars
+        setTimeout(adjustGanttLabels, 50);
+
+        // Setup bidirectional vertical scroll sync
+        // IMPORTANT: Must be AFTER new Gantt() because .gantt-container is created by Frappe Gantt
+        const ganttOuter = document.getElementById('gantt-container');
+        const innerGanttContainer = ganttOuter ? ganttOuter.querySelector('.gantt-container') : null;
+
+        if (innerGanttContainer && leftBody) {
+            // Clean up old listeners
+            if (leftBody._scrollHandler) leftBody.removeEventListener('scroll', leftBody._scrollHandler);
+            if (window._prevInnerGantt && window._prevInnerGanttScrollHandler) {
+                window._prevInnerGantt.removeEventListener('scroll', window._prevInnerGanttScrollHandler);
+            }
+
+            let _syncingFromLeft = false;
+            let _syncingFromRight = false;
+
+            // Left → Right sync
+            leftBody._scrollHandler = function() {
+                if (_syncingFromRight) return;
+                _syncingFromLeft = true;
+                requestAnimationFrame(() => {
+                    innerGanttContainer.scrollTop = leftBody.scrollTop;
+                    _syncingFromLeft = false;
+                    syncGanttHeader(innerGanttContainer.scrollTop);
+                });
+            };
+            leftBody.addEventListener('scroll', leftBody._scrollHandler);
+
+            // Right → Left sync
+            window._prevInnerGanttScrollHandler = function() {
+                if (_syncingFromLeft) return;
+                _syncingFromRight = true;
+                requestAnimationFrame(() => {
+                    leftBody.scrollTop = innerGanttContainer.scrollTop;
+                    _syncingFromRight = false;
+                    syncGanttHeader(innerGanttContainer.scrollTop);
+                });
+            };
+            innerGanttContainer.addEventListener('scroll', window._prevInnerGanttScrollHandler);
+            window._prevInnerGantt = innerGanttContainer;
+
+            // Trigger initial header sync
+            syncGanttHeader(innerGanttContainer.scrollTop);
+        }
+    }
+
+    function adjustGanttLabels() {
+        const wrappers = document.querySelectorAll('#gantt-chart-svg .bar-wrapper');
+        wrappers.forEach(wrapper => {
+            const label = wrapper.querySelector('.bar-label');
+            if (label) {
+                // Since we now have a left table, we completely hide the text in the SVG chart
+                label.style.display = 'none';
+            }
+        });
+
+        // Also ensure header position is synchronized when the chart redraws
+        const innerGanttContainer = document.querySelector('#gantt-container .gantt-container');
+        if (innerGanttContainer) {
+            syncGanttHeader(innerGanttContainer.scrollTop);
+        }
+    }
+
+    function syncGanttHeader(scrollTop) {
+        const container = document.getElementById('gantt-container');
+        if (!container) return;
+
+        // 1. Target the grid-header background rect
+        const headerRect = container.querySelector('.grid-header');
+        if (headerRect) {
+            headerRect.setAttribute('transform', `translate(0, ${scrollTop})`);
+        }
+
+        // 2. Target the upper-text and lower-text date labels
+        const upperTexts = container.querySelectorAll('.upper-text');
+        upperTexts.forEach(text => {
+            text.setAttribute('transform', `translate(0, ${scrollTop})`);
+        });
+
+        const lowerTexts = container.querySelectorAll('.lower-text');
+        lowerTexts.forEach(text => {
+            text.setAttribute('transform', `translate(0, ${scrollTop})`);
+        });
+
+        // 3. Make sure the header elements are drawn on top of the bars and grid ticks
+        if (headerRect) {
+            const svg = document.getElementById('gantt-chart-svg');
+            if (svg) {
+                const lastChild = svg.lastChild;
+                if (lowerTexts.length > 0 && lastChild !== lowerTexts[lowerTexts.length - 1]) {
+                    svg.appendChild(headerRect);
+                    upperTexts.forEach(t => svg.appendChild(t));
+                    lowerTexts.forEach(t => svg.appendChild(t));
+                }
+            }
+        }
     }
 
     function changeViewMode(mode) {
@@ -377,14 +719,16 @@
         // Update active class on button
         const btnGroup = document.querySelector(".view-btn-group");
         btnGroup.querySelectorAll(".btn").forEach(btn => {
-            btn.classList.remove("active");
-            if (btn.innerText.includes(mode) || (mode === 'Quarter Day' && btn.innerText.includes('6小時')) || (mode === 'Half Day' && btn.innerText.includes('半天')) || (mode === 'Day' && btn.innerText === '天')) {
+            if (btn.getAttribute("data-mode") === mode) {
                 btn.classList.add("active");
+            } else {
+                btn.classList.remove("active");
             }
         });
 
         if (ganttInstance) {
             ganttInstance.change_view_mode(mode);
+            setTimeout(adjustGanttLabels, 50);
         }
     }
 

@@ -11,6 +11,7 @@
     var tasksCompleted = (IEnumerable<MPMS.Models.TaskModel>)ViewBag.TasksCompleted;
     var attachments = (IEnumerable<MPMS.Models.TaskAttachment>)ViewBag.Attachments;
     var actionItems = (IEnumerable<MPMS.Models.MeetingAction>)ViewBag.ActionItems;
+    var focalTasks = (IEnumerable<MPMS.Models.TaskModel>)ViewBag.FocalTasks ?? new List<MPMS.Models.TaskModel>();
 }
 
 <!-- Header -->
@@ -89,49 +90,227 @@
 <div class="row">
     <!-- Left Column: Focal Lists & Tab Dashboard -->
     <div class="col-lg-8 mb-4">
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header bg-white border-bottom-0 pt-3">
-                <ul class="nav nav-pills card-header-pills" id="meetingTabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="due-tab" data-bs-toggle="pill" data-bs-target="#due" type="button" role="tab" aria-controls="due" aria-selected="true">
-                            📅 本週截止 <span class="badge bg-danger ms-1">@tasksDue.Count()</span>
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="updated-tab" data-bs-toggle="pill" data-bs-target="#updated" type="button" role="tab" aria-controls="updated" aria-selected="false">
-                            🔄 當週更新 <span class="badge bg-indigo ms-1 text-light" style="background-color: #6366f1;">@tasksUpdated.Count()</span>
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="blocked-tab" data-bs-toggle="pill" data-bs-target="#blocked" type="button" role="tab" aria-controls="blocked" aria-selected="false">
-                            🚧 卡關任務 <span class="badge bg-warning text-dark ms-1">@tasksBlocked.Count()</span>
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="reviewing-tab" data-bs-toggle="pill" data-bs-target="#reviewing" type="button" role="tab" aria-controls="reviewing" aria-selected="false">
-                            🔍 審查中 <span class="badge bg-info text-dark ms-1">@tasksReviewing.Count()</span>
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="completed-tab" data-bs-toggle="pill" data-bs-target="#completed" type="button" role="tab" aria-controls="completed" aria-selected="false">
-                            ✅ 本週完成 <span class="badge bg-success ms-1">@tasksCompleted.Count()</span>
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="wall-tab" data-bs-toggle="pill" data-bs-target="#wall" type="button" role="tab" aria-controls="wall" aria-selected="false">
-                            🖼️ 附件牆 <span class="badge bg-secondary ms-1">@attachments.Count()</span>
-                        </button>
-                    </li>
-                </ul>
-            </div>
+        <!-- KPI Dashboard Grid (Replaces old tabs) -->
+        <div class="kpi-grid" id="meetingTabs" role="tablist">
+            <button class="kpi-tab-btn active" id="focal-tab" data-bs-toggle="pill" data-bs-target="#focal" type="button" role="tab" aria-controls="focal" aria-selected="true">
+                <div class="kpi-header">
+                    <div class="kpi-icon text-primary">🎯</div>
+                    <div class="kpi-count">@focalTasks.Count()</div>
+                </div>
+                <div class="kpi-title">開會重點</div>
+            </button>
+            <button class="kpi-tab-btn" id="due-tab" data-bs-toggle="pill" data-bs-target="#due" type="button" role="tab" aria-controls="due" aria-selected="false">
+                <div class="kpi-header">
+                    <div class="kpi-icon text-danger">📅</div>
+                    <div class="kpi-count">@tasksDue.Count()</div>
+                </div>
+                <div class="kpi-title">本週截止</div>
+            </button>
+            <button class="kpi-tab-btn" id="updated-tab" data-bs-toggle="pill" data-bs-target="#updated" type="button" role="tab" aria-controls="updated" aria-selected="false">
+                <div class="kpi-header">
+                    <div class="kpi-icon text-indigo">🔄</div>
+                    <div class="kpi-count">@tasksUpdated.Count()</div>
+                </div>
+                <div class="kpi-title">當週更新</div>
+            </button>
+            <button class="kpi-tab-btn" id="blocked-tab" data-bs-toggle="pill" data-bs-target="#blocked" type="button" role="tab" aria-controls="blocked" aria-selected="false">
+                <div class="kpi-header">
+                    <div class="kpi-icon text-warning">🚧</div>
+                    <div class="kpi-count">@tasksBlocked.Count()</div>
+                </div>
+                <div class="kpi-title">卡關任務</div>
+            </button>
+            <button class="kpi-tab-btn" id="reviewing-tab" data-bs-toggle="pill" data-bs-target="#reviewing" type="button" role="tab" aria-controls="reviewing" aria-selected="false">
+                <div class="kpi-header">
+                    <div class="kpi-icon text-info">🔍</div>
+                    <div class="kpi-count">@tasksReviewing.Count()</div>
+                </div>
+                <div class="kpi-title">審查中</div>
+            </button>
+            <button class="kpi-tab-btn" id="completed-tab" data-bs-toggle="pill" data-bs-target="#completed" type="button" role="tab" aria-controls="completed" aria-selected="false">
+                <div class="kpi-header">
+                    <div class="kpi-icon text-success">✅</div>
+                    <div class="kpi-count">@tasksCompleted.Count()</div>
+                </div>
+                <div class="kpi-title">本週完成</div>
+            </button>
+            <button class="kpi-tab-btn" id="wall-tab" data-bs-toggle="pill" data-bs-target="#wall" type="button" role="tab" aria-controls="wall" aria-selected="false">
+                <div class="kpi-header">
+                    <div class="kpi-icon text-secondary">🖼️</div>
+                    <div class="kpi-count">@attachments.Count()</div>
+                </div>
+                <div class="kpi-title">附件牆</div>
+            </button>
+        </div>
 
-            <div class="card-body">
+        <div class="card border-0 shadow-sm content-glass-card">
+            <div class="card-body p-4">
+                <!-- Global Project Filter -->
+                <div class="d-flex justify-content-end mb-3 pb-3 border-bottom border-light">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="text-muted small fw-bold"><i class="bi bi-funnel-fill"></i> 全域專案分類：</span>
+                        <select id="globalProjectFilter" class="form-select-custom" style="min-width: 220px;" onchange="applyGlobalProjectFilter()">
+                            <option value="All">顯示全部專案</option>
+                            @foreach (var p in ((IEnumerable<MPMS.Models.Project>)ViewBag.AllProjects))
+                            {
+                                <option value="@p.ProjectId">@p.ProjectName</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
                 <div class="tab-content" id="meetingTabsContent">
                     
-                    <!-- Tab 1: 本週截止 -->
-                    <div class="tab-pane fade show active" id="due" role="tabpanel" aria-labelledby="due-tab">
+                    <!-- Tab 0: 開會重點 -->
+                    <div class="tab-pane fade show active" id="focal" role="tabpanel" aria-labelledby="focal-tab">
+                        <!-- Filters for focal list -->
+                        <div class="d-flex flex-wrap align-items-center justify-content-between mb-4 p-3 filter-glass-bar gap-3">
+                            <!-- Week Filter -->
+                            <div class="segmented-control flex-grow-1" id="focalWeekFilterGroup" style="max-width: 400px;">
+                                <input type="radio" class="btn-check" name="focalWeekFilter" id="focalWeekAll" value="all" autocomplete="off" onchange="filterFocalTasks()">
+                                <label class="btn" for="focalWeekAll">三週</label>
+
+                                <input type="radio" class="btn-check" name="focalWeekFilter" id="focalWeekLast" value="last" autocomplete="off" onchange="filterFocalTasks()">
+                                <label class="btn" for="focalWeekLast">上週</label>
+
+                                <input type="radio" class="btn-check" name="focalWeekFilter" id="focalWeekThis" value="this" checked autocomplete="off" onchange="filterFocalTasks()">
+                                <label class="btn" for="focalWeekThis">這週</label>
+
+                                <input type="radio" class="btn-check" name="focalWeekFilter" id="focalWeekNext" value="next" autocomplete="off" onchange="filterFocalTasks()">
+                                <label class="btn" for="focalWeekNext">下週</label>
+                            </div>
+                            
+                            <div class="d-flex gap-2 flex-grow-1 justify-content-md-end flex-wrap">
+                                <!-- Status Filter -->
+                                <select id="focalStatusFilter" class="form-select-custom" onchange="filterFocalTasks()">
+                                    <option value="All">全部狀態</option>
+                                    <option value="Todo">待處理</option>
+                                    <option value="Progress">進行中</option>
+                                    <option value="Blocked">卡關</option>
+                                    <option value="Reviewing">審查中</option>
+                                    <option value="Done">已完成</option>
+                                </select>
+                                
+                                <!-- Owner Filter -->
+                                <select id="focalOwnerFilter" class="form-select-custom" onchange="filterFocalTasks()">
+                                    <option value="All">全部負責人</option>
+                                    @foreach (var u in focalTasks.Select(t => new { t.OwnerUserId, t.OwnerUserName }).DistinctBy(x => x.OwnerUserId))
+                                    {
+                                        <option value="@u.OwnerUserId">@u.OwnerUserName</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Focal Tasks Table -->
                         <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
+                            <table class="table table-custom align-middle mb-0">
+                                <thead>
+                                    <tr class="text-muted fs-7 text-uppercase">
+                                        <th>任務 / 專案 / 專案階段</th>
+                                        <th>負責人</th>
+                                        <th>任務期間</th>
+                                        <th>狀態</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!focalTasks.Any())
+                                    {
+                                        <tr><td colspan="5" class="text-center py-4 text-muted">無三週區間內的任務。</td></tr>
+                                    }
+                                    else
+                                    {
+                                        var lastWeekStart = startOfWeek.AddDays(-7);
+                                        var lastWeekEnd = startOfWeek.AddDays(-1);
+                                        var thisWeekStart = startOfWeek;
+                                        var thisWeekEnd = endOfWeek;
+                                        var nextWeekStart = endOfWeek.AddDays(1);
+                                        var nextWeekEnd = endOfWeek.AddDays(7);
+
+                                        foreach (var t in focalTasks)
+                                        {
+                                            var pStart = t.PlannedStartDate ?? t.DueDate.AddDays(-7);
+                                            var pEnd = t.DueDate;
+
+                                            var inLastWeek = pStart <= lastWeekEnd && pEnd >= lastWeekStart;
+                                            var inThisWeek = pStart <= thisWeekEnd && pEnd >= thisWeekStart;
+                                            var inNextWeek = pStart <= nextWeekEnd && pEnd >= nextWeekStart;
+
+                                            <tr class="focal-task-row" 
+                                                data-lastweek="@(inLastWeek ? "true" : "false")" 
+                                                data-thisweek="@(inThisWeek ? "true" : "false")" 
+                                                data-nextweek="@(inNextWeek ? "true" : "false")" 
+                                                data-project="@t.ProjectId"
+                                                data-status="@t.TaskStatus" 
+                                                data-owner="@t.OwnerUserId">
+                                                <td>
+                                                    <a href="/Task/Details/@t.TaskId" class="fw-bold text-dark text-decoration-none">
+                                                        @t.TaskTitle
+                                                    </a>
+                                                    <div class="text-muted" style="font-size: 0.8rem;">
+                                                        📂 @t.ProjectName &bull; 🏷️ @t.PhaseName
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div class="d-flex align-items-center">
+                                                        <div class="avatar-sm bg-light text-dark rounded-circle me-2 d-flex align-items-center justify-content-center fw-bold" style="width:24px; height:24px; font-size: 0.75rem;">
+                                                            @t.OwnerUserName?.Substring(0, Math.Min(1, t.OwnerUserName?.Length ?? 0))
+                                                        </div>
+                                                        <span>@t.OwnerUserName</span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <span class="small text-muted">
+                                                        @(t.PlannedStartDate?.ToString("yyyy-MM-dd") ?? "--") ~ @t.DueDate.ToString("yyyy-MM-dd")
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    @switch (t.TaskStatus)
+                                                    {
+                                                        case "Todo":
+                                                            <span class="badge bg-secondary">待處理</span>
+                                                            break;
+                                                        case "Progress":
+                                                            <span class="badge bg-primary">進行中</span>
+                                                            break;
+                                                        case "Reviewing":
+                                                            <span class="badge bg-info text-dark">審查中</span>
+                                                            break;
+                                                        case "Done":
+                                                            <span class="badge bg-success">已完成</span>
+                                                            break;
+                                                        case "Blocked":
+                                                            <span class="badge bg-danger" title="卡關原因：@t.BlockedReason">卡關 🚧</span>
+                                                            break;
+                                                    }
+                                                </td>
+                                                <td>
+                                                    <div class="d-flex gap-1">
+                                                        @if ((User.IsInRole("ADMIN") || User.IsInRole("PM")) && (t.TaskStatus == "Reviewing" || t.TaskStatus == "Done"))
+                                                        {
+                                                            <button type="button" class="btn btn-xs btn-danger rounded-pill px-2" onclick="openReturnModal(@t.TaskId, '@t.TaskTitle')">
+                                                                🚫 現場退回
+                                                            </button>
+                                                        }
+                                                        <a href="/Task/Details/@t.TaskId" class="btn btn-xs btn-outline-secondary rounded-pill px-2">
+                                                            詳情
+                                                        </a>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                            <div id="focalNoDataAlert" class="alert alert-info text-center py-4 rounded-3 m-3 d-none">此篩選條件下無符合的任務項目。</div>
+                        </div>
+                    </div>
+
+                    <!-- Tab 1: 本週截止 -->
+                    <div class="tab-pane fade" id="due" role="tabpanel" aria-labelledby="due-tab">
+                        <div class="table-responsive">
+                            <table class="table table-custom align-middle mb-0">
                                 <thead>
                                     <tr class="text-muted fs-7 text-uppercase">
                                         <th>任務 / 專案 / 專案階段</th>
@@ -161,7 +340,7 @@
                     <!-- Tab 2: 當週更新 -->
                     <div class="tab-pane fade" id="updated" role="tabpanel" aria-labelledby="updated-tab">
                         <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
+                            <table class="table table-custom align-middle mb-0">
                                 <thead>
                                     <tr class="text-muted fs-7 text-uppercase">
                                         <th>任務 / 專案 / 專案階段</th>
@@ -191,7 +370,7 @@
                     <!-- Tab 3: 卡關任務 -->
                     <div class="tab-pane fade" id="blocked" role="tabpanel" aria-labelledby="blocked-tab">
                         <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
+                            <table class="table table-custom align-middle mb-0">
                                 <thead>
                                     <tr class="text-muted fs-7 text-uppercase">
                                         <th>任務 / 專案 / 專案階段</th>
@@ -236,7 +415,7 @@
                     <!-- Tab 4: 審查中 -->
                     <div class="tab-pane fade" id="reviewing" role="tabpanel" aria-labelledby="reviewing-tab">
                         <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
+                            <table class="table table-custom align-middle mb-0">
                                 <thead>
                                     <tr class="text-muted fs-7 text-uppercase">
                                         <th>任務 / 專案 / 專案階段</th>
@@ -289,7 +468,7 @@
                     <!-- Tab 5: 本週完成 -->
                     <div class="tab-pane fade" id="completed" role="tabpanel" aria-labelledby="completed-tab">
                         <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
+                            <table class="table table-custom align-middle mb-0">
                                 <thead>
                                     <tr class="text-muted fs-7 text-uppercase">
                                         <th>任務 / 專案 / 專案階段</th>
@@ -378,7 +557,7 @@
                                                         }
                                                     </div>
                                                     <div class="overflow-hidden">
-                                                        <a href="/uploads/@att.StoredFileName" download="@att.OriginalFileName" class="fw-bold text-dark text-decoration-none text-truncate d-block" title="@att.OriginalFileName">
+                                                        <a href="/Task/DownloadAttachment/@att.AttachmentId" target="_blank" class="fw-bold text-dark text-decoration-none text-truncate d-block" title="@att.OriginalFileName">
                                                             @att.OriginalFileName
                                                         </a>
                                                         <small class="text-muted d-block">@((att.FileSizeBytes / 1024.0).ToString("N1")) KB &bull; @att.FileExt.ToUpper()</small>
@@ -393,7 +572,10 @@
                                                         <small class="text-muted d-block">👤 上傳人：@att.UploadUserName</small>
                                                         <small class="text-muted d-block">🕒 時間：@att.UploadedAt.ToString("MM-dd HH:mm")</small>
                                                     </div>
-                                                    <a href="/Task/Details/@att.TaskId" class="btn btn-sm btn-light rounded-pill px-3">查看任務</a>
+                                                    <div>
+                                                        <a href="/Task/DownloadAttachment/@att.AttachmentId" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill px-3 me-1">下載</a>
+                                                        <a href="/Task/Details/@att.TaskId" class="btn btn-sm btn-light rounded-pill px-3">查看任務</a>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -406,32 +588,12 @@
                 </div>
             </div>
         </div>
-
-        <!-- Meeting Notes Panel -->
-        <div class="card border-0 shadow-sm">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="fw-bold text-dark mb-0">📝 週會會議記錄</h5>
-                    @if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
-                    {
-                        <button type="button" id="btnSaveNotes" class="btn btn-sm btn-indigo text-light rounded-pill px-3" style="background-color:#4f46e5;">
-                            💾 儲存會議記錄
-                        </button>
-                    }
-                </div>
-                <div class="mb-0">
-                    <textarea class="form-control" id="meetingNotesTextarea" rows="6" placeholder="請在此輸入本次週會記錄大綱、討論內容或決議事項..." @(User.IsInRole("ADMIN") || User.IsInRole("PM") ? "" : "disabled")>@Model.MeetingNote</textarea>
-                </div>
-                <div id="notesSaveStatus" class="text-success mt-2 fs-7" style="display:none;">
-                    &check; 會議記錄已成功儲存！
-                </div>
-            </div>
-        </div>
     </div>
 
-    <!-- Right Column: Temporary Action Items -->
+    <!-- Right Column: Tools & Actions -->
     <div class="col-lg-4">
-        <div class="card border-0 shadow-sm mb-4 h-100">
+        <!-- Temporary Action Items -->
+        <div class="card border-0 shadow-sm mb-4">
             <div class="card-header bg-white border-bottom-0 pt-3 d-flex justify-content-between align-items-center">
                 <h5 class="fw-bold text-dark mb-0">📋 現場臨時派工 (Action Items)</h5>
                 @if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
@@ -493,6 +655,27 @@
                             </div>
                         }
                     }
+                </div>
+            </div>
+        </div>
+
+        <!-- Meeting Notes Panel -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold text-dark mb-0">📝 週會會議記錄</h5>
+                    @if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
+                    {
+                        <button type="button" id="btnSaveNotes" class="btn btn-sm btn-indigo text-light rounded-pill px-3" style="background-color:#4f46e5;">
+                            💾 儲存會議記錄
+                        </button>
+                    }
+                </div>
+                <div class="mb-0">
+                    <textarea class="form-control" id="meetingNotesTextarea" rows="6" placeholder="請在此輸入本次週會記錄大綱、討論內容或決議事項..." @(User.IsInRole("ADMIN") || User.IsInRole("PM") ? "" : "disabled")>@Model.MeetingNote</textarea>
+                </div>
+                <div id="notesSaveStatus" class="text-success mt-2 fs-7" style="display:none;">
+                    &check; 會議記錄已成功儲存！
                 </div>
             </div>
         </div>
@@ -715,7 +898,76 @@
                     localStorage.setItem(activeTabKey, targetId);
                 })
             });
+
+            // Apply default focal task filtering
+            filterFocalTasks();
         });
+
+        // ------------------ Global Project Filtering ------------------
+        function applyGlobalProjectFilter() {
+            var projectVal = $('#globalProjectFilter').val();
+            
+            // Filter all other tabs
+            $('.global-task-row').each(function() {
+                var row = $(this);
+                var project = row.attr('data-project');
+                if (projectVal === 'All' || project === projectVal) {
+                    row.show();
+                } else {
+                    row.hide();
+                }
+            });
+
+            // Also trigger the focal tasks filter since it has extra rules
+            filterFocalTasks();
+        }
+
+        // ------------------ Focal Tasks Filtering ------------------
+        function filterFocalTasks() {
+            var weekVal = $('input[name="focalWeekFilter"]:checked').val();
+            var projectVal = $('#globalProjectFilter').val();
+            var statusVal = $('#focalStatusFilter').val();
+            var ownerVal = $('#focalOwnerFilter').val();
+            var visibleCount = 0;
+
+            $('.focal-task-row').each(function() {
+                var row = $(this);
+                var inLastWeek = row.attr('data-lastweek') === 'true';
+                var inThisWeek = row.attr('data-thisweek') === 'true';
+                var inNextWeek = row.attr('data-nextweek') === 'true';
+                var project = row.attr('data-project');
+                var status = row.attr('data-status');
+                var owner = row.attr('data-owner');
+
+                var weekMatch = false;
+                if (weekVal === 'all') {
+                    weekMatch = true;
+                } else if (weekVal === 'last') {
+                    weekMatch = inLastWeek;
+                } else if (weekVal === 'this') {
+                    weekMatch = inThisWeek;
+                } else if (weekVal === 'next') {
+                    weekMatch = inNextWeek;
+                }
+
+                var projectMatch = (projectVal === 'All' || project === projectVal);
+                var statusMatch = (statusVal === 'All' || status === statusVal);
+                var ownerMatch = (ownerVal === 'All' || owner === ownerVal);
+
+                if (weekMatch && projectMatch && statusMatch && ownerMatch) {
+                    row.show();
+                    visibleCount++;
+                } else {
+                    row.hide();
+                }
+            });
+
+            if (visibleCount === 0) {
+                $('#focalNoDataAlert').removeClass('d-none');
+            } else {
+                $('#focalNoDataAlert').addClass('d-none');
+            }
+        }
 
         // ------------------ Meeting Note Auto-saving/Saving ------------------
         $('#btnSaveNotes').click(function() {
@@ -836,72 +1088,228 @@
 }
 
 <style>
-    /* Premium style elements */
-    .bg-indigo {
-        background-color: #4f46e5 !important;
+    :root {
+        --glass-bg: rgba(255, 255, 255, 0.7);
+        --glass-border: rgba(255, 255, 255, 0.4);
+        --primary-indigo: #4f46e5;
+        --primary-indigo-hover: #4338ca;
+        --bg-color: #f8fafc;
     }
-    .text-indigo {
-        color: #4f46e5 !important;
+    
+    body {
+        background-color: var(--bg-color);
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     }
+
+    /* KPI Grid Dashboard */
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        gap: 12px;
+        margin-bottom: 24px;
+    }
+    .kpi-tab-btn {
+        background: var(--glass-bg);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid var(--glass-border);
+        border-radius: 16px;
+        padding: 16px;
+        text-align: left;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+    }
+    .kpi-tab-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 15px rgba(0,0,0,0.05);
+        background: rgba(255, 255, 255, 0.9);
+    }
+    .kpi-tab-btn.active {
+        background: white;
+        border-color: var(--primary-indigo);
+        box-shadow: 0 0 0 1px var(--primary-indigo), 0 10px 15px rgba(79, 70, 229, 0.1);
+    }
+    .kpi-tab-btn.active::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; width: 100%; height: 4px;
+        background: var(--primary-indigo);
+    }
+    .kpi-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+    .kpi-icon {
+        font-size: 1.25rem;
+    }
+    .kpi-count {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+    .kpi-title {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #64748b;
+    }
+
+    /* Glassmorphism Cards */
+    .content-glass-card {
+        background: var(--glass-bg);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid var(--glass-border);
+        border-radius: 24px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.02);
+    }
+    .filter-glass-bar {
+        background: rgba(255, 255, 255, 0.5);
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(255, 255, 255, 0.6);
+        border-radius: 16px;
+    }
+
+    /* Segmented Control */
+    .segmented-control {
+        display: flex;
+        background: #e2e8f0;
+        padding: 4px;
+        border-radius: 12px;
+    }
+    .segmented-control input[type="radio"] {
+        display: none;
+    }
+    .segmented-control label {
+        flex: 1;
+        text-align: center;
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #64748b;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .segmented-control input[type="radio"]:checked + label {
+        background: white;
+        color: var(--primary-indigo);
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+    
+    /* Custom Select */
+    .form-select-custom {
+        border: 1px solid #cbd5e1;
+        border-radius: 12px;
+        padding: 8px 32px 8px 12px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: #334155;
+        background-color: white;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 0.75rem center;
+        background-size: 16px 12px;
+        appearance: none;
+        transition: all 0.2s ease;
+    }
+    .form-select-custom:focus {
+        outline: none;
+        border-color: var(--primary-indigo);
+        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+    }
+
+    /* Premium Table Rows */
+    .table-custom {
+        border-collapse: separate;
+        border-spacing: 0 8px;
+    }
+    .table-custom thead th {
+        border: none;
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        color: #94a3b8;
+        padding-left: 16px;
+    }
+    .table-custom tbody tr {
+        background: white;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        border-radius: 12px;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .table-custom tbody tr:hover {
+        transform: translateY(-2px) scale(1.005);
+        box-shadow: 0 8px 15px rgba(0,0,0,0.05);
+        z-index: 1;
+        position: relative;
+    }
+    .table-custom tbody td {
+        border: none;
+        padding: 16px;
+        vertical-align: middle;
+    }
+    .table-custom tbody td:first-child {
+        border-top-left-radius: 12px;
+        border-bottom-left-radius: 12px;
+    }
+    .table-custom tbody td:last-child {
+        border-top-right-radius: 12px;
+        border-bottom-right-radius: 12px;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+        background: #f1f5f9; 
+        border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: #cbd5e1; 
+        border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8; 
+    }
+
+    /* Utility overrides */
+    .bg-indigo { background-color: var(--primary-indigo) !important; }
+    .text-indigo { color: var(--primary-indigo) !important; }
     .btn-indigo {
-        background-color: #4f46e5;
-        border-color: #4f46e5;
+        background-color: var(--primary-indigo);
+        border-color: var(--primary-indigo);
+        color: white;
     }
     .btn-indigo:hover {
-        background-color: #4338ca;
-        border-color: #4338ca;
-    }
-    .btn-outline-indigo {
-        color: #4f46e5;
-        border-color: #4f46e5;
-    }
-    .btn-outline-indigo:hover {
-        background-color: #4f46e5;
+        background-color: var(--primary-indigo-hover);
+        border-color: var(--primary-indigo-hover);
         color: white;
     }
-    .bg-success-soft {
-        background-color: rgba(25, 135, 84, 0.1);
-        color: #198754;
-    }
-    .bg-danger-soft {
-        background-color: rgba(220, 53, 69, 0.1);
-        color: #dc3545;
-    }
-    .bg-warning-soft {
-        background-color: rgba(255, 193, 7, 0.15);
-        color: #b58100;
-    }
-    .bg-info-soft {
-        background-color: rgba(13, 202, 240, 0.15);
-        color: #087990;
-    }
+    .bg-success-soft { background-color: #dcfce7; color: #166534; }
+    .bg-danger-soft { background-color: #fee2e2; color: #991b1b; }
+    .bg-warning-soft { background-color: #fef3c7; color: #92400e; }
+    .bg-info-soft { background-color: #e0f2fe; color: #075985; }
     .btn-xs {
-        padding: 0.25rem 0.5rem;
+        padding: 0.25rem 0.6rem;
         font-size: 0.75rem;
-        border-radius: 0.2rem;
-    }
-    .nav-pills .nav-link {
-        color: #475569;
         font-weight: 500;
-        border-radius: 20px;
-        padding: 8px 16px;
-    }
-    .nav-pills .nav-link.active {
-        background-color: #4f46e5;
-        color: white;
+        border-radius: 6px;
     }
     .action-item-card {
-        border-left: 4px solid #6366f1 !important;
+        border-left: 4px solid var(--primary-indigo) !important;
         transition: transform 0.2s, box-shadow 0.2s;
+        border-radius: 12px;
     }
     .action-item-card:hover {
         transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(0,0,0,0.05);
     }
-    .fs-7 {
-        font-size: 0.85rem;
-    }
-    .table > :not(caption) > * > * {
-        padding: 12px 8px;
-    }
+    .fs-7 { font-size: 0.85rem; }
 </style>

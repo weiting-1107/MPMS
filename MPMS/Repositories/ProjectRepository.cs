@@ -116,5 +116,83 @@ namespace MPMS.Repositories
             var rows = await conn.ExecuteAsync(sql, new { ProjectId = projectId, NewPmUserId = newPmUserId });
             return rows > 0;
         }
+
+        // Delete project and all children (phases, tasks, logs, reviews, attachments, predecessors) in transaction
+        public async Task<bool> DeleteProjectAsync(int projectId)
+        {
+            using var conn = CreateConnection();
+            conn.Open();
+            using var trans = conn.BeginTransaction();
+            try
+            {
+                // 1. Unlink meetings
+                await conn.ExecuteAsync("UPDATE dbo.MPMS_MEETING SET project_id = NULL WHERE project_id = @ProjectId", new { ProjectId = projectId }, transaction: trans);
+
+                // 2. Unlink parent snapshots and delete snapshots (cascades task/milestone/project snapshots)
+                await conn.ExecuteAsync("UPDATE dbo.MPMS_WEEKLY_SNAPSHOT SET parent_snapshot_id = NULL WHERE project_id = @ProjectId", new { ProjectId = projectId }, transaction: trans);
+                await conn.ExecuteAsync("DELETE FROM dbo.MPMS_WEEKLY_SNAPSHOT WHERE project_id = @ProjectId", new { ProjectId = projectId }, transaction: trans);
+
+                // 3. Delete phase snapshots
+                await conn.ExecuteAsync("DELETE FROM dbo.MPMS_SNAPSHOT_PHASE WHERE phase_id IN (SELECT phase_id FROM dbo.MPMS_PROJECT_PHASE WHERE project_id = @ProjectId)", new { ProjectId = projectId }, transaction: trans);
+
+                // 4. Get all phase IDs under this project
+                var phaseIds = (await conn.QueryAsync<int>(
+                    "SELECT phase_id FROM dbo.MPMS_PROJECT_PHASE WHERE project_id = @ProjectId",
+                    new { ProjectId = projectId }, transaction: trans)).ToList();
+
+                if (phaseIds.Any())
+                {
+                    // 5. Get all task IDs under those phases
+                    var taskIds = (await conn.QueryAsync<int>(
+                        "SELECT task_id FROM dbo.MPMS_TASK WHERE phase_id IN @PhaseIds",
+                        new { PhaseIds = phaseIds }, transaction: trans)).ToList();
+
+                    if (taskIds.Any())
+                    {
+                        // 6. Break task review circular reference
+                        await conn.ExecuteAsync("UPDATE dbo.MPMS_TASK SET current_review_id = NULL WHERE task_id IN @Ids", new { Ids = taskIds }, transaction: trans);
+
+                        // 7. Delete task reviews attachments association
+                        await conn.ExecuteAsync(@"
+                            DELETE FROM dbo.MPMS_TASK_REVIEW_ATTACHMENT 
+                            WHERE review_id IN (SELECT review_id FROM dbo.MPMS_TASK_REVIEW WHERE task_id IN @Ids)", 
+                            new { Ids = taskIds }, transaction: trans);
+
+                        await conn.ExecuteAsync(@"
+                            DELETE FROM dbo.MPMS_TASK_REVIEW_ATTACHMENT 
+                            WHERE attachment_id IN (SELECT attachment_id FROM dbo.MPMS_TASK_ATTACHMENT WHERE task_id IN @Ids)", 
+                            new { Ids = taskIds }, transaction: trans);
+
+                        // Unlink tasks from meeting action items
+                        await conn.ExecuteAsync("UPDATE dbo.MPMS_MEETING_ACTION SET task_id = NULL WHERE task_id IN @Ids", new { Ids = taskIds }, transaction: trans);
+
+                        // 8. Delete related records for those tasks
+                        await conn.ExecuteAsync("DELETE FROM dbo.MPMS_TASK_STATUS_LOG WHERE task_id IN @Ids", new { Ids = taskIds }, transaction: trans);
+                        await conn.ExecuteAsync("DELETE FROM dbo.MPMS_TASK_REVIEW WHERE task_id IN @Ids", new { Ids = taskIds }, transaction: trans);
+                        await conn.ExecuteAsync("DELETE FROM dbo.MPMS_TASK_ATTACHMENT WHERE task_id IN @Ids", new { Ids = taskIds }, transaction: trans);
+                        await conn.ExecuteAsync("DELETE FROM dbo.MPMS_TASK_DEPENDENCY WHERE task_id IN @Ids", new { Ids = taskIds }, transaction: trans);
+                        await conn.ExecuteAsync("DELETE FROM dbo.MPMS_TASK_DEPENDENCY WHERE predecessor_task_id IN @Ids", new { Ids = taskIds }, transaction: trans);
+                        
+                        await conn.ExecuteAsync("DELETE FROM dbo.MPMS_TASK_ASSIST WHERE task_id IN @Ids", new { Ids = taskIds }, transaction: trans);
+                        await conn.ExecuteAsync("DELETE FROM dbo.MPMS_SNAPSHOT_TASK WHERE task_id IN @Ids", new { Ids = taskIds }, transaction: trans);
+                        await conn.ExecuteAsync("DELETE FROM dbo.MPMS_TASK WHERE task_id IN @Ids", new { Ids = taskIds }, transaction: trans);
+                    }
+
+                    // 9. Delete phases
+                    await conn.ExecuteAsync("DELETE FROM dbo.MPMS_PROJECT_PHASE WHERE project_id = @ProjectId", new { ProjectId = projectId }, transaction: trans);
+                }
+
+                // 10. Delete project itself
+                var rows = await conn.ExecuteAsync("DELETE FROM dbo.MPMS_PROJECT WHERE project_id = @ProjectId", new { ProjectId = projectId }, transaction: trans);
+
+                trans.Commit();
+                return rows > 0;
+            }
+            catch
+            {
+                trans.Rollback();
+                throw;
+            }
+        }
     }
 }

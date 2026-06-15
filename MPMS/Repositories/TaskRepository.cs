@@ -805,5 +805,44 @@ namespace MPMS.Repositories
             using var conn = CreateConnection();
             return await conn.QueryFirstOrDefaultAsync<TaskAttachment>(sql, new { AttachmentId = attachmentId });
         }
+
+        // Delete a single task and all its related records in a transaction
+        public async Task<bool> DeleteTaskAsync(int taskId)
+        {
+            using var conn = CreateConnection();
+            conn.Open();
+            using var trans = conn.BeginTransaction();
+            try
+            {
+                // Break task review circular reference
+                await conn.ExecuteAsync("UPDATE dbo.MPMS_TASK SET current_review_id = NULL WHERE task_id = @TaskId", new { TaskId = taskId }, transaction: trans);
+
+                // Delete task reviews attachments association
+                await conn.ExecuteAsync(@"
+                    DELETE FROM dbo.MPMS_TASK_REVIEW_ATTACHMENT 
+                    WHERE review_id IN (SELECT review_id FROM dbo.MPMS_TASK_REVIEW WHERE task_id = @TaskId)
+                       OR attachment_id IN (SELECT attachment_id FROM dbo.MPMS_TASK_ATTACHMENT WHERE task_id = @TaskId)", 
+                    new { TaskId = taskId }, transaction: trans);
+
+                // Unlink task from meeting action items
+                await conn.ExecuteAsync("UPDATE dbo.MPMS_MEETING_ACTION SET task_id = NULL WHERE task_id = @TaskId", new { TaskId = taskId }, transaction: trans);
+
+                await conn.ExecuteAsync("DELETE FROM dbo.MPMS_TASK_STATUS_LOG WHERE task_id = @TaskId", new { TaskId = taskId }, transaction: trans);
+                await conn.ExecuteAsync("DELETE FROM dbo.MPMS_TASK_REVIEW WHERE task_id = @TaskId", new { TaskId = taskId }, transaction: trans);
+                await conn.ExecuteAsync("DELETE FROM dbo.MPMS_TASK_ATTACHMENT WHERE task_id = @TaskId", new { TaskId = taskId }, transaction: trans);
+                await conn.ExecuteAsync("DELETE FROM dbo.MPMS_TASK_DEPENDENCY WHERE task_id = @TaskId OR predecessor_task_id = @TaskId", new { TaskId = taskId }, transaction: trans);
+                await conn.ExecuteAsync("DELETE FROM dbo.MPMS_TASK_ASSIST WHERE task_id = @TaskId", new { TaskId = taskId }, transaction: trans);
+                await conn.ExecuteAsync("DELETE FROM dbo.MPMS_SNAPSHOT_TASK WHERE task_id = @TaskId", new { TaskId = taskId }, transaction: trans);
+                var rows = await conn.ExecuteAsync("DELETE FROM dbo.MPMS_TASK WHERE task_id = @TaskId", new { TaskId = taskId }, transaction: trans);
+
+                trans.Commit();
+                return rows > 0;
+            }
+            catch
+            {
+                trans.Rollback();
+                throw;
+            }
+        }
     }
 }

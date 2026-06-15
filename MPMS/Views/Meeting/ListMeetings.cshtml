@@ -101,6 +101,13 @@
                                     <a asp-action="Index" asp-route-id="@m.MeetingId" class="btn btn-sm btn-outline-primary px-3 rounded-pill">
                                         🖥️ 進入週會控制台
                                     </a>
+                                    @if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-danger px-3 rounded-pill ms-1"
+                                                onclick="confirmDeleteMeeting(@m.MeetingId, '@m.MeetingWeek', '@m.MeetingDate.ToString("yyyy-MM-dd")')">
+                                            🗑️ 刪除
+                                        </button>
+                                    }
                                 </td>
                             </tr>
                         }
@@ -178,6 +185,46 @@
         </div>
     </div>
 }
+
+@if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
+{
+    <!-- Delete Confirmation Modal -->
+    <div class="modal fade" id="deleteMeetingModal" tabindex="-1" aria-labelledby="deleteMeetingModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+                <div class="modal-header border-bottom-0 bg-danger text-white" style="border-radius: 16px 16px 0 0;">
+                    <h5 class="modal-title fw-bold" id="deleteMeetingModalLabel">🗑️ 確認刪除週會</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body py-4">
+                    <p class="text-muted mb-1">您確定要刪除以下週會記錄嗎？</p>
+                    <div class="alert alert-warning border-0 shadow-sm">
+                        <div class="fw-bold fs-6" id="deleteMeetingWeek"></div>
+                        <small class="text-muted" id="deleteMeetingDate"></small>
+                    </div>
+                    <p class="text-danger small fw-semibold mb-0">⚠️ 此操作將同時刪除該週會下所有臨時派工項目 (Action Items)，且無法復原！</p>
+                </div>
+                <div class="modal-footer border-top-0">
+                    <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">取消</button>
+                    <form id="deleteMeetingForm" asp-action="DeleteMeeting" method="post" style="display:inline;">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="meetingId" id="deleteMeetingIdInput" value="" />
+                        <button type="submit" class="btn btn-danger rounded-pill px-4">🗑️ 確認刪除</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<script>
+    function confirmDeleteMeeting(meetingId, week, date) {
+        document.getElementById('deleteMeetingIdInput').value = meetingId;
+        document.getElementById('deleteMeetingWeek').textContent = '📅 週別：' + week;
+        document.getElementById('deleteMeetingDate').textContent = '🕒 會議日期：' + date;
+        new bootstrap.Modal(document.getElementById('deleteMeetingModal')).show();
+    }
+</script>
 
 <style>
     /* Styling for softer badges */

@@ -58,6 +58,9 @@
         </p>
     </div>
     <div class="d-flex gap-2">
+        <a href="/Gantt/Index?projectId=@Model.ProjectId" class="btn btn-outline-primary rounded-3 px-3 py-2">
+            📊 返回甘特圖
+        </a>
         <a href="/Project/Phases?projectId=@Model.ProjectId" class="btn btn-outline-secondary rounded-3 px-3 py-2">
             ⬅️ 返回專案階段
         </a>
@@ -66,6 +69,10 @@
             <a href="/Task/Edit/@Model.TaskId" class="btn btn-outline-dark rounded-3 px-3 py-2">
                 ✏️ 編輯任務
             </a>
+            <button type="button" class="btn btn-outline-danger rounded-3 px-3 py-2"
+                    onclick="confirmDeleteTask(@Model.TaskId, '@Html.Raw(Model.TaskTitle.Replace("'", "\\'"))')">
+                🗑️ 刪除任務
+            </button>
         }
     </div>
 </div>
@@ -511,6 +518,36 @@
     </div>
 </div>
 
+@if (isAdmin || isPm)
+{
+    <!-- Delete Task Confirmation Modal -->
+    <div class="modal fade" id="deleteTaskModal" tabindex="-1" aria-labelledby="deleteTaskModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+                <div class="modal-header border-bottom-0 bg-danger text-white" style="border-radius: 16px 16px 0 0;">
+                    <h5 class="modal-title fw-bold" id="deleteTaskModalLabel">🗑️ 確認刪除任務</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body py-4">
+                    <p class="text-muted mb-1">您確定要刪除以下任務嗎？此操作無法還原！</p>
+                    <div class="alert alert-warning border-0 shadow-sm">
+                        <div class="fw-bold fs-6" id="deleteTaskTitle"></div>
+                    </div>
+                    <p class="text-danger small fw-semibold mb-0">⚠️ 警告：這將會同時刪除該任務的相關相依關係、簽核歷程、附件與歷程軌跡！</p>
+                </div>
+                <div class="modal-footer border-top-0">
+                    <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">取消</button>
+                    <form id="deleteTaskForm" action="/Task/DeleteTask" method="post" style="display:inline;">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="taskId" id="deleteTaskIdInput" value="" />
+                        <button type="submit" class="btn btn-danger rounded-pill px-4">🗑️ 確認刪除</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @section Scripts {
     <script>
         // Enforce word count limit of 30 characters in Submit to Review form
@@ -533,6 +570,12 @@
                     submitBtn.disabled = true;
                 }
             });
+        }
+
+        function confirmDeleteTask(taskId, taskTitle) {
+            document.getElementById('deleteTaskIdInput').value = taskId;
+            document.getElementById('deleteTaskTitle').textContent = taskTitle;
+            new bootstrap.Modal(document.getElementById('deleteTaskModal')).show();
         }
     </script>
 }

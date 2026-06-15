@@ -32,20 +32,26 @@ namespace MPMS.Repositories
         }
 
         // Seal Weekly Snapshot (Transactional)
-        public async Task<int> SealSnapshotAsync(int? meetingId, int projectId, int sealedByUserId, string? correctionReason, string? snapshotNote = null)
+        // meetingDate: 週會的日期，用來決定 week_code（例如 W20 的週會快拍應存成 2026-W20）
+        public async Task<int> SealSnapshotAsync(int? meetingId, int projectId, int sealedByUserId, string? correctionReason, string? snapshotNote = null, DateTime? meetingDate = null)
         {
             using var conn = CreateConnection();
             conn.Open();
             using var trans = conn.BeginTransaction();
             try
             {
-                // 1. Calculate Period and Week Code in Asia/Taipei TimeZone
+                // 1. Calculate Period and Week Code based on meeting date (not current system time)
+                //    This ensures W20 meeting snapshot is stored as 2026-W20, W25 as 2026-W25, etc.
                 var tz = TimeZoneInfo.FindSystemTimeZoneById("Asia/Taipei");
                 var utcNow = DateTime.UtcNow;
-                var localNow = TimeZoneInfo.ConvertTimeFromUtc(utcNow, tz);
                 
-                int isoYear = System.Globalization.ISOWeek.GetYear(localNow);
-                int weekNum = System.Globalization.ISOWeek.GetWeekOfYear(localNow);
+                // Use meeting date for week_code; fall back to current time if not provided
+                var dateForWeekCode = meetingDate.HasValue
+                    ? new DateTime(meetingDate.Value.Year, meetingDate.Value.Month, meetingDate.Value.Day, 0, 0, 0, DateTimeKind.Unspecified)
+                    : TimeZoneInfo.ConvertTimeFromUtc(utcNow, tz);
+                
+                int isoYear = System.Globalization.ISOWeek.GetYear(dateForWeekCode);
+                int weekNum = System.Globalization.ISOWeek.GetWeekOfYear(dateForWeekCode);
                 string weekCode = $"{isoYear}-W{weekNum:D2}";
 
                 // Find period start (end date of last sealed snapshot, or project start date)

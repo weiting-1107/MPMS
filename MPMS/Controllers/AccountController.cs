@@ -14,10 +14,12 @@ namespace MPMS.Controllers
     public class AccountController : Controller
     {
         private readonly AuthService _authService;
+        private readonly Repositories.UserRepository _userRepository;
 
-        public AccountController(AuthService authService)
+        public AccountController(AuthService authService, Repositories.UserRepository userRepository)
         {
             _authService = authService;
+            _userRepository = userRepository;
         }
 
         [HttpGet]
@@ -95,6 +97,53 @@ namespace MPMS.Controllers
         public IActionResult AccessDenied()
         {
             return View();
+        }
+
+        // GET: Account/ChangePassword
+        [HttpGet]
+        [Authorize]
+        public IActionResult ChangePassword()
+        {
+            return View(new ChangePasswordViewModel());
+        }
+
+        // POST: Account/ChangePassword
+        [HttpPost]
+        [Authorize]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ChangePassword(ChangePasswordViewModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+                return View(model);
+            }
+
+            var account = User.Identity?.Name;
+            if (string.IsNullOrEmpty(account))
+            {
+                return RedirectToAction("Login");
+            }
+
+            // Verify old password
+            var user = await _authService.AuthenticateAsync(account, model.OldPassword);
+            if (user == null)
+            {
+                ModelState.AddModelError("OldPassword", "舊密碼不正確。");
+                return View(model);
+            }
+
+            // Hash new password and update
+            string newHash = _authService.HashPassword(model.NewPassword);
+            bool success = await _userRepository.UpdatePasswordAsync(user.UserId, newHash);
+
+            if (success)
+            {
+                TempData["SuccessMessage"] = "密碼已成功變更！下次請使用新密碼登入。";
+                return RedirectToAction("Index", "Dashboard");
+            }
+
+            ModelState.AddModelError(string.Empty, "密碼變更失敗，請稍後再試。");
+            return View(model);
         }
     }
 }

@@ -422,5 +422,89 @@ namespace MPMS.Controllers
             ViewBag.Project = project;
             return View(phase);
         }
+
+        // DELETE: Project/DeleteProject (僅限 Admin / PM)
+        [HttpPost]
+        [Authorize(Roles = "ADMIN,PM")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteProject(int projectId)
+        {
+            var project = await _projectRepository.GetProjectByIdAsync(projectId);
+            if (project == null)
+            {
+                TempData["ErrorMessage"] = "找不到該專案。";
+                return RedirectToAction(nameof(Manage));
+            }
+
+            try
+            {
+                var success = await _projectRepository.DeleteProjectAsync(projectId);
+                if (success)
+                {
+                    await _auditService.LogAsync(
+                        CurrentUserId,
+                        "DeleteProject",
+                        "MPMS_PROJECT",
+                        projectId.ToString(),
+                        project,
+                        null
+                    );
+                    TempData["SuccessMessage"] = $"專案「{project.ProjectName}」及其所有階段與任務已成功刪除。";
+                }
+                else
+                {
+                    TempData["ErrorMessage"] = "刪除專案失敗，請稍後再試。";
+                }
+            }
+            catch (Exception ex)
+            {
+                TempData["ErrorMessage"] = MPMS.Helpers.DbErrorTranslationHelper.TranslateException(ex, "刪除專案失敗");
+            }
+
+            return RedirectToAction(nameof(Manage));
+        }
+
+        // DELETE: Project/DeletePhase (僅限 Admin / PM)
+        [HttpPost]
+        [Authorize(Roles = "ADMIN,PM")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeletePhase(int phaseId)
+        {
+            var phase = await _projectPhaseRepository.GetPhaseByIdAsync(phaseId);
+            if (phase == null)
+            {
+                TempData["ErrorMessage"] = "找不到該專案階段。";
+                return RedirectToAction(nameof(Manage));
+            }
+
+            int projectId = phase.ProjectId;
+
+            try
+            {
+                var success = await _projectPhaseRepository.DeletePhaseAsync(phaseId);
+                if (success)
+                {
+                    await _auditService.LogAsync(
+                        CurrentUserId,
+                        "DeletePhase",
+                        "MPMS_PROJECT_PHASE",
+                        phaseId.ToString(),
+                        phase,
+                        null
+                    );
+                    TempData["SuccessMessage"] = $"階段「{phase.PhaseName}」及其所有任務已成功刪除。";
+                }
+                else
+                {
+                    TempData["ErrorMessage"] = "刪除階段失敗，請稍後再試。";
+                }
+            }
+            catch (Exception ex)
+            {
+                TempData["ErrorMessage"] = MPMS.Helpers.DbErrorTranslationHelper.TranslateException(ex, "刪除階段失敗");
+            }
+
+            return RedirectToAction(nameof(Phases), new { projectId });
+        }
     }
 }
