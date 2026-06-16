@@ -31,6 +31,9 @@ namespace MPMS.Models
         [Display(Name = "手動進度 (%)")]
         public decimal ManualProgressPct { get; set; }
 
+        [Display(Name = "進度計算模式")]
+        public string ProgressMode { get; set; } = "Manual"; // Auto, Manual
+
         [Display(Name = "階段狀態")]
         public string PhaseStatus { get; set; } = "Planned"; // Planned, Active, Completed, Voided
 

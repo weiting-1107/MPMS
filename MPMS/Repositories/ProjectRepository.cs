@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+    using System.Collections.Generic;
 using System.Threading.Tasks;
 using Dapper;
 using Microsoft.Extensions.Configuration;
@@ -149,8 +149,8 @@ namespace MPMS.Repositories
 
                     if (taskIds.Any())
                     {
-                        // 6. Break task review circular reference
-                        await conn.ExecuteAsync("UPDATE dbo.MPMS_TASK SET current_review_id = NULL WHERE task_id IN @Ids", new { Ids = taskIds }, transaction: trans);
+                        // 6. Break task review and block circular references
+                        await conn.ExecuteAsync("UPDATE dbo.MPMS_TASK SET current_review_id = NULL, current_block_id = NULL WHERE task_id IN @Ids", new { Ids = taskIds }, transaction: trans);
 
                         // 7. Delete task reviews attachments association
                         await conn.ExecuteAsync(@"
@@ -172,7 +172,15 @@ namespace MPMS.Repositories
                         await conn.ExecuteAsync("DELETE FROM dbo.MPMS_TASK_ATTACHMENT WHERE task_id IN @Ids", new { Ids = taskIds }, transaction: trans);
                         await conn.ExecuteAsync("DELETE FROM dbo.MPMS_TASK_DEPENDENCY WHERE task_id IN @Ids", new { Ids = taskIds }, transaction: trans);
                         await conn.ExecuteAsync("DELETE FROM dbo.MPMS_TASK_DEPENDENCY WHERE predecessor_task_id IN @Ids", new { Ids = taskIds }, transaction: trans);
+                        await conn.ExecuteAsync("DELETE FROM dbo.MPMS_TASK_CHECKLIST WHERE task_id IN @Ids", new { Ids = taskIds }, transaction: trans);
                         
+                        // Delete block comments and block logs
+                        await conn.ExecuteAsync(@"
+                            DELETE FROM dbo.MPMS_TASK_BLOCK_COMMENT 
+                            WHERE block_id IN (SELECT block_id FROM dbo.MPMS_TASK_BLOCK_LOG WHERE task_id IN @Ids)", 
+                            new { Ids = taskIds }, transaction: trans);
+                        await conn.ExecuteAsync("DELETE FROM dbo.MPMS_TASK_BLOCK_LOG WHERE task_id IN @Ids", new { Ids = taskIds }, transaction: trans);
+
                         await conn.ExecuteAsync("DELETE FROM dbo.MPMS_TASK_ASSIST WHERE task_id IN @Ids", new { Ids = taskIds }, transaction: trans);
                         await conn.ExecuteAsync("DELETE FROM dbo.MPMS_SNAPSHOT_TASK WHERE task_id IN @Ids", new { Ids = taskIds }, transaction: trans);
                         await conn.ExecuteAsync("DELETE FROM dbo.MPMS_TASK WHERE task_id IN @Ids", new { Ids = taskIds }, transaction: trans);

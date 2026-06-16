@@ -24,6 +24,7 @@ namespace MPMS.Controllers
         private readonly AuditService _auditService;
         private readonly IHubContext<MeetingHub> _hubContext;
         private readonly NotificationService _notificationService;
+        private readonly BlockRepository _blockRepository;
 
         public MeetingController(
             MeetingRepository meetingRepository,
@@ -34,7 +35,8 @@ namespace MPMS.Controllers
             SnapshotRepository snapshotRepository,
             AuditService auditService,
             IHubContext<MeetingHub> hubContext,
-            NotificationService notificationService)
+            NotificationService notificationService,
+            BlockRepository blockRepository)
         {
             _meetingRepository = meetingRepository;
             _projectRepository = projectRepository;
@@ -45,6 +47,7 @@ namespace MPMS.Controllers
             _auditService = auditService;
             _hubContext = hubContext;
             _notificationService = notificationService;
+            _blockRepository = blockRepository;
         }
 
         private int CurrentUserId => int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
@@ -112,7 +115,8 @@ namespace MPMS.Controllers
             // Fetch focal lists
             var tasksDue = await _meetingRepository.GetTasksDueThisWeekAsync(startOfWeek, endOfWeek, meeting.ProjectId);
             var tasksUpdated = await _meetingRepository.GetTasksUpdatedThisWeekAsync(startOfWeek, endOfWeek, meeting.ProjectId);
-            var tasksBlocked = await _meetingRepository.GetBlockedTasksAsync(meeting.ProjectId);
+            var allBlocks = await _blockRepository.GetBlockLogsAsync(projectId: meeting.ProjectId);
+            var tasksBlocked = allBlocks.Where(b => b.BlockStatus == "Open" || b.BlockStatus == "InProgress" || b.BlockStatus == "WaitingExternal").ToList();
             var tasksReviewing = await _meetingRepository.GetReviewingTasksAsync(meeting.ProjectId);
             var tasksCompleted = await _meetingRepository.GetTasksCompletedThisWeekAsync(startOfWeek, endOfWeek, meeting.ProjectId);
             var attachments = await _meetingRepository.GetAttachmentWallAsync(startOfWeek, endOfWeek, meeting.ProjectId);

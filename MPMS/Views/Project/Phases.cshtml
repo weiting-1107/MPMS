@@ -89,9 +89,26 @@
                                                 @foreach (var task in phTasks)
                                                 {
                                                     <div class="d-flex align-items-center justify-content-between p-2 bg-light rounded-3 small border border-light-subtle">
-                                                        <a href="/Task/Details/@task.TaskId" class="text-decoration-none text-dark fw-semibold small">
-                                                            @task.TaskTitle
-                                                        </a>
+                                                        <div class="d-flex align-items-center gap-2 flex-grow-1 me-2">
+                                                            <a href="/Task/Details/@task.TaskId" class="text-decoration-none text-dark fw-semibold small">
+                                                                @task.TaskTitle
+                                                            </a>
+                                                            @if (task.TaskStatus != "Done" && task.ManualProgressPct > 0)
+                                                            {
+                                                                <div class="d-flex align-items-center gap-1">
+                                                                    <div class="progress rounded-pill" style="width: 35px; height: 4px;" title="@task.ManualProgressPct.ToString("0")%">
+                                                                        <div class="progress-bar rounded-pill" style="width: @task.ManualProgressPct%; background: #6366f1;"></div>
+                                                                    </div>
+                                                                    <span class="text-muted" style="font-size:0.65rem;">@task.ManualProgressPct.ToString("0")%</span>
+                                                                </div>
+                                                            }
+                                                            @if (task.ChecklistCount > 0)
+                                                            {
+                                                                <span class="badge bg-light text-primary border ms-2" style="font-size: 0.65rem;">
+                                                                    ✅ @task.ChecklistDoneCount/@task.ChecklistCount (@task.ChecklistProgressPct.ToString("0")%)
+                                                                </span>
+                                                            }
+                                                        </div>
                                                         <div class="d-flex gap-1 align-items-center">
                                                             <span class="text-muted x-small">👤 @task.OwnerUserName</span>
                                                             @if (task.TaskStatus == "Todo")
@@ -137,6 +154,14 @@
                                         <div class="progress rounded-pill" style="width: 50px; height: 5px;">
                                             <div class="progress-bar rounded-pill" role="progressbar" style="width: @ph.ManualProgressPct% ; background-color: #6366f1;" aria-valuenow="@ph.ManualProgressPct" aria-valuemin="0" aria-valuemax="100"></div>
                                         </div>
+                                        @if (ph.ProgressMode == "Auto")
+                                        {
+                                            <span class="badge rounded-pill px-2 py-1" style="font-size:0.68rem; background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0;" title="自動計算模式">🔄 自動</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge rounded-pill px-2 py-1" style="font-size:0.68rem; background: #ede9fe; color: #4c1d95; border: 1px solid #c4b5fd;" title="手動設定模式">✋ 手動</span>
+                                        }
                                     </div>
                                 </td>
                                 <td>

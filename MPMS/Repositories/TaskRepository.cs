@@ -122,11 +122,20 @@ namespace MPMS.Repositories
         public async Task<IEnumerable<TaskModel>> GetTasksByOwnerAsync(int userId)
         {
             const string sql = @"
-                SELECT t.*, ph.phase_name as PhaseName, p.project_name as ProjectName, p.project_id as ProjectId, u.user_name as OwnerUserName
+                SELECT t.*, ph.phase_name as PhaseName, p.project_name as ProjectName, p.project_id as ProjectId, u.user_name as OwnerUserName,
+                       ISNULL(chk.ChecklistCount, 0) as ChecklistCount, ISNULL(chk.ChecklistDoneCount, 0) as ChecklistDoneCount, ISNULL(chk.ChecklistProgressPct, 0) as ChecklistProgressPct
                 FROM dbo.MPMS_TASK t
                 INNER JOIN dbo.MPMS_PROJECT_PHASE ph ON t.phase_id = ph.phase_id
                 INNER JOIN dbo.MPMS_PROJECT p ON ph.project_id = p.project_id
                 INNER JOIN dbo.MPMS_USER u ON t.owner_user_id = u.user_id
+                OUTER APPLY (
+                    SELECT 
+                        COUNT(checklist_id) as ChecklistCount,
+                        SUM(CASE WHEN is_done = 1 THEN 1 ELSE 0 END) as ChecklistDoneCount,
+                        CASE WHEN COUNT(checklist_id) > 0 THEN CAST(SUM(CASE WHEN is_done = 1 THEN 1.0 ELSE 0.0 END) * 100.0 / COUNT(checklist_id) AS DECIMAL(5,2)) ELSE 0.00 END as ChecklistProgressPct
+                    FROM dbo.MPMS_TASK_CHECKLIST
+                    WHERE task_id = t.task_id
+                ) chk
                 WHERE t.owner_user_id = @UserId AND t.task_status <> 'Done'
                 ORDER BY t.due_date ASC";
 
@@ -138,12 +147,21 @@ namespace MPMS.Repositories
         public async Task<IEnumerable<TaskModel>> GetTasksByAssistAsync(int userId)
         {
             const string sql = @"
-                SELECT t.*, ph.phase_name as PhaseName, p.project_name as ProjectName, p.project_id as ProjectId, u.user_name as OwnerUserName
+                SELECT t.*, ph.phase_name as PhaseName, p.project_name as ProjectName, p.project_id as ProjectId, u.user_name as OwnerUserName,
+                       ISNULL(chk.ChecklistCount, 0) as ChecklistCount, ISNULL(chk.ChecklistDoneCount, 0) as ChecklistDoneCount, ISNULL(chk.ChecklistProgressPct, 0) as ChecklistProgressPct
                 FROM dbo.MPMS_TASK t
                 INNER JOIN dbo.MPMS_PROJECT_PHASE ph ON t.phase_id = ph.phase_id
                 INNER JOIN dbo.MPMS_PROJECT p ON ph.project_id = p.project_id
                 INNER JOIN dbo.MPMS_USER u ON t.owner_user_id = u.user_id
                 INNER JOIN dbo.MPMS_TASK_ASSIST ta ON t.task_id = ta.task_id
+                OUTER APPLY (
+                    SELECT 
+                        COUNT(checklist_id) as ChecklistCount,
+                        SUM(CASE WHEN is_done = 1 THEN 1 ELSE 0 END) as ChecklistDoneCount,
+                        CASE WHEN COUNT(checklist_id) > 0 THEN CAST(SUM(CASE WHEN is_done = 1 THEN 1.0 ELSE 0.0 END) * 100.0 / COUNT(checklist_id) AS DECIMAL(5,2)) ELSE 0.00 END as ChecklistProgressPct
+                    FROM dbo.MPMS_TASK_CHECKLIST
+                    WHERE task_id = t.task_id
+                ) chk
                 WHERE ta.assist_user_id = @UserId AND t.task_status <> 'Done'
                 ORDER BY t.due_date ASC";
 
@@ -155,12 +173,21 @@ namespace MPMS.Repositories
         public async Task<IEnumerable<TaskModel>> GetTasksForReviewAsync(int userId)
         {
             const string sql = @"
-                SELECT DISTINCT t.*, ph.phase_name as PhaseName, p.project_name as ProjectName, p.project_id as ProjectId, u.user_name as OwnerUserName
+                SELECT DISTINCT t.*, ph.phase_name as PhaseName, p.project_name as ProjectName, p.project_id as ProjectId, u.user_name as OwnerUserName,
+                       ISNULL(chk.ChecklistCount, 0) as ChecklistCount, ISNULL(chk.ChecklistDoneCount, 0) as ChecklistDoneCount, ISNULL(chk.ChecklistProgressPct, 0) as ChecklistProgressPct
                 FROM dbo.MPMS_TASK t
                 INNER JOIN dbo.MPMS_PROJECT_PHASE ph ON t.phase_id = ph.phase_id
                 INNER JOIN dbo.MPMS_PROJECT p ON ph.project_id = p.project_id
                 INNER JOIN dbo.MPMS_USER u ON t.owner_user_id = u.user_id
                 LEFT JOIN dbo.MPMS_TASK_ASSIST ta ON t.task_id = ta.task_id
+                OUTER APPLY (
+                    SELECT 
+                        COUNT(checklist_id) as ChecklistCount,
+                        SUM(CASE WHEN is_done = 1 THEN 1 ELSE 0 END) as ChecklistDoneCount,
+                        CASE WHEN COUNT(checklist_id) > 0 THEN CAST(SUM(CASE WHEN is_done = 1 THEN 1.0 ELSE 0.0 END) * 100.0 / COUNT(checklist_id) AS DECIMAL(5,2)) ELSE 0.00 END as ChecklistProgressPct
+                    FROM dbo.MPMS_TASK_CHECKLIST
+                    WHERE task_id = t.task_id
+                ) chk
                 WHERE t.task_status = 'Reviewing' 
                   AND t.owner_user_id <> @UserId
                   AND (ta.assist_user_id = @UserId OR p.pm_user_id = @UserId OR @UserId IN (SELECT user_id FROM dbo.MPMS_USER WHERE role_id = 1))
@@ -174,10 +201,19 @@ namespace MPMS.Repositories
         public async Task<IEnumerable<TaskModel>> GetTasksByPhaseAsync(int phaseId)
         {
             const string sql = @"
-                SELECT t.*, ph.phase_name as PhaseName, u.user_name as OwnerUserName
+                SELECT t.*, ph.phase_name as PhaseName, u.user_name as OwnerUserName,
+                       ISNULL(chk.ChecklistCount, 0) as ChecklistCount, ISNULL(chk.ChecklistDoneCount, 0) as ChecklistDoneCount, ISNULL(chk.ChecklistProgressPct, 0) as ChecklistProgressPct
                 FROM dbo.MPMS_TASK t
                 INNER JOIN dbo.MPMS_PROJECT_PHASE ph ON t.phase_id = ph.phase_id
                 INNER JOIN dbo.MPMS_USER u ON t.owner_user_id = u.user_id
+                OUTER APPLY (
+                    SELECT 
+                        COUNT(checklist_id) as ChecklistCount,
+                        SUM(CASE WHEN is_done = 1 THEN 1 ELSE 0 END) as ChecklistDoneCount,
+                        CASE WHEN COUNT(checklist_id) > 0 THEN CAST(SUM(CASE WHEN is_done = 1 THEN 1.0 ELSE 0.0 END) * 100.0 / COUNT(checklist_id) AS DECIMAL(5,2)) ELSE 0.00 END as ChecklistProgressPct
+                    FROM dbo.MPMS_TASK_CHECKLIST
+                    WHERE task_id = t.task_id
+                ) chk
                 WHERE t.phase_id = @PhaseId
                 ORDER BY t.due_date ASC";
 
@@ -189,10 +225,19 @@ namespace MPMS.Repositories
         public async Task<IEnumerable<TaskModel>> GetTasksByProjectIdAsync(int projectId)
         {
             const string sql = @"
-                SELECT t.*, ph.phase_name as PhaseName, u.user_name as OwnerUserName
+                SELECT t.*, ph.phase_name as PhaseName, u.user_name as OwnerUserName,
+                       ISNULL(chk.ChecklistCount, 0) as ChecklistCount, ISNULL(chk.ChecklistDoneCount, 0) as ChecklistDoneCount, ISNULL(chk.ChecklistProgressPct, 0) as ChecklistProgressPct
                 FROM dbo.MPMS_TASK t
                 INNER JOIN dbo.MPMS_PROJECT_PHASE ph ON t.phase_id = ph.phase_id
                 INNER JOIN dbo.MPMS_USER u ON t.owner_user_id = u.user_id
+                OUTER APPLY (
+                    SELECT 
+                        COUNT(checklist_id) as ChecklistCount,
+                        SUM(CASE WHEN is_done = 1 THEN 1 ELSE 0 END) as ChecklistDoneCount,
+                        CASE WHEN COUNT(checklist_id) > 0 THEN CAST(SUM(CASE WHEN is_done = 1 THEN 1.0 ELSE 0.0 END) * 100.0 / COUNT(checklist_id) AS DECIMAL(5,2)) ELSE 0.00 END as ChecklistProgressPct
+                    FROM dbo.MPMS_TASK_CHECKLIST
+                    WHERE task_id = t.task_id
+                ) chk
                 WHERE ph.project_id = @ProjectId
                 ORDER BY t.due_date ASC";
 
@@ -206,7 +251,8 @@ namespace MPMS.Repositories
             const string sqlTask = @"
                 SELECT t.*, ph.phase_name as PhaseName, p.project_name as ProjectName, p.project_id as ProjectId, 
                        u.user_name as OwnerUserName, c.user_name as CreatorUserName,
-                       u_rev.user_name as ReviewerUserName, u_bak.user_name as BackupReviewerUserName
+                       u_rev.user_name as ReviewerUserName, u_bak.user_name as BackupReviewerUserName,
+                       ISNULL(chk.ChecklistCount, 0) as ChecklistCount, ISNULL(chk.ChecklistDoneCount, 0) as ChecklistDoneCount, ISNULL(chk.ChecklistProgressPct, 0) as ChecklistProgressPct
                 FROM dbo.MPMS_TASK t
                 INNER JOIN dbo.MPMS_PROJECT_PHASE ph ON t.phase_id = ph.phase_id
                 INNER JOIN dbo.MPMS_PROJECT p ON ph.project_id = p.project_id
@@ -214,6 +260,14 @@ namespace MPMS.Repositories
                 INNER JOIN dbo.MPMS_USER c ON t.created_by = c.user_id
                 LEFT JOIN dbo.MPMS_USER u_rev ON t.reviewer_user_id = u_rev.user_id
                 LEFT JOIN dbo.MPMS_USER u_bak ON t.backup_reviewer_user_id = u_bak.user_id
+                OUTER APPLY (
+                    SELECT 
+                        COUNT(checklist_id) as ChecklistCount,
+                        SUM(CASE WHEN is_done = 1 THEN 1 ELSE 0 END) as ChecklistDoneCount,
+                        CASE WHEN COUNT(checklist_id) > 0 THEN CAST(SUM(CASE WHEN is_done = 1 THEN 1.0 ELSE 0.0 END) * 100.0 / COUNT(checklist_id) AS DECIMAL(5,2)) ELSE 0.00 END as ChecklistProgressPct
+                    FROM dbo.MPMS_TASK_CHECKLIST
+                    WHERE task_id = t.task_id
+                ) chk
                 WHERE t.task_id = @TaskId";
 
             using var conn = CreateConnection();
@@ -359,6 +413,7 @@ namespace MPMS.Repositories
                         planned_start_date = @PlannedStartDate,
                         is_milestone = @IsMilestone,
                         gantt_sort_no = @GanttSortNo,
+                        current_block_id = @CurrentBlockId,
                         updated_by = @UpdatedBy,
                         updated_at = GETDATE()
                     WHERE task_id = @TaskId AND row_version = @RowVersion";
@@ -476,6 +531,83 @@ namespace MPMS.Repositories
                     INSERT INTO dbo.MPMS_TASK_STATUS_LOG (task_id, old_status, new_status, change_reason, changed_by, changed_at)
                     VALUES (@TaskId, @OldStatus, @NewStatus, @Reason, @OperatorUserId, GETDATE())";
                 await conn.ExecuteAsync(sqlLog, new { TaskId = taskId, OldStatus = oldStatus, NewStatus = newStatus, Reason = reason, OperatorUserId = operatorUserId }, transaction: trans);
+
+                trans.Commit();
+                return true;
+            }
+            catch
+            {
+                trans.Rollback();
+                throw;
+            }
+        }
+
+        // Add Task Attachment
+        // Update Task Manual Progress Percentage
+        public async Task<bool> UpdateTaskProgressAsync(int taskId, decimal progressPct, int operatorUserId, byte[] rowVersion)
+        {
+            using var conn = CreateConnection();
+            conn.Open();
+            using var trans = conn.BeginTransaction();
+            try
+            {
+                // 1. Get current status
+                const string sqlGet = "SELECT task_status FROM dbo.MPMS_TASK WHERE task_id = @TaskId";
+                var currentStatus = await conn.QueryFirstOrDefaultAsync<string>(sqlGet, new { TaskId = taskId }, transaction: trans);
+                if (currentStatus == null)
+                {
+                    trans.Rollback();
+                    return false;
+                }
+
+                // 2. Check if we need to update status
+                bool shouldRevertFromDone = (currentStatus == "Done" && progressPct < 100);
+                bool shouldStartFromTodo = (currentStatus == "Todo" && progressPct > 0);
+                
+                string newStatus = currentStatus;
+                string? changeReason = null;
+                
+                if (shouldRevertFromDone)
+                {
+                    newStatus = "Progress";
+                    changeReason = "調整任務進度低於 100%，狀態自動變更為進行中。";
+                }
+                else if (shouldStartFromTodo)
+                {
+                    newStatus = "Progress";
+                    changeReason = "回報任務進度大於 0%，狀態自動變更為進行中。";
+                }
+
+                // 3. Update task
+                string sqlUpdate = @"
+                    UPDATE dbo.MPMS_TASK
+                    SET manual_progress_pct = @ProgressPct,
+                        task_status = @NewStatus,
+                        updated_by = @OperatorUserId,
+                        updated_at = GETDATE()";
+
+                if (shouldRevertFromDone)
+                {
+                    sqlUpdate += ", done_at = NULL";
+                }
+
+                sqlUpdate += " WHERE task_id = @TaskId AND row_version = @RowVersion";
+
+                var rows = await conn.ExecuteAsync(sqlUpdate, new { TaskId = taskId, ProgressPct = progressPct, NewStatus = newStatus, OperatorUserId = operatorUserId, RowVersion = rowVersion }, transaction: trans);
+                if (rows == 0)
+                {
+                    trans.Rollback();
+                    return false;
+                }
+
+                // 4. If status changed, insert status log
+                if (newStatus != currentStatus && changeReason != null)
+                {
+                    const string sqlLog = @"
+                        INSERT INTO dbo.MPMS_TASK_STATUS_LOG (task_id, old_status, new_status, change_reason, changed_by, changed_at)
+                        VALUES (@TaskId, @OldStatus, @NewStatus, @Reason, @OperatorUserId, GETDATE())";
+                    await conn.ExecuteAsync(sqlLog, new { TaskId = taskId, OldStatus = currentStatus, NewStatus = newStatus, Reason = changeReason, OperatorUserId = operatorUserId }, transaction: trans);
+                }
 
                 trans.Commit();
                 return true;
@@ -843,6 +975,40 @@ namespace MPMS.Repositories
                 trans.Rollback();
                 throw;
             }
+        }
+
+        /// <summary>
+        /// 在指定的 Transaction 中更新任務的狀態、卡關 ID 與卡關原因
+        /// </summary>
+        public async Task<bool> UpdateTaskBlockStatusAsync(
+            int taskId, 
+            string newStatus, 
+            int? currentBlockId, 
+            string? blockedReason, 
+            int operatorUserId, 
+            byte[] rowVersion, 
+            IDbConnection connection, 
+            IDbTransaction transaction)
+        {
+            const string sql = @"
+                UPDATE dbo.MPMS_TASK
+                SET task_status = @NewStatus,
+                    current_block_id = @CurrentBlockId,
+                    blocked_reason = @BlockedReason,
+                    updated_by = @OperatorUserId,
+                    updated_at = GETDATE()
+                WHERE task_id = @TaskId AND row_version = @RowVersion";
+
+            var rows = await connection.ExecuteAsync(sql, new {
+                TaskId = taskId,
+                NewStatus = newStatus,
+                CurrentBlockId = currentBlockId,
+                BlockedReason = blockedReason,
+                OperatorUserId = operatorUserId,
+                RowVersion = rowVersion
+            }, transaction: transaction);
+
+            return rows > 0;
         }
     }
 }

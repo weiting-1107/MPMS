@@ -57,6 +57,8 @@ namespace MPMS.Models
         public int? CurrentReviewId { get; set; }
         public int? ReviewerUserId { get; set; }
         public int? BackupReviewerUserId { get; set; }
+        public int? CurrentBlockId { get; set; }
+        public byte[]? ReviewRowVersion { get; set; }
 
         [Required(ErrorMessage = "請選擇計畫開始日期")]
         [Display(Name = "計畫開始日")]
@@ -67,6 +69,14 @@ namespace MPMS.Models
         public bool IsMilestone { get; set; }
 
         public int GanttSortNo { get; set; }
+
+        [Range(0.00, 100.00, ErrorMessage = "進度必須介於 0% 到 100% 之間")]
+        [Display(Name = "任務進度 (%)")]
+        public decimal ManualProgressPct { get; set; }
+
+        public int ChecklistCount { get; set; }
+        public int ChecklistDoneCount { get; set; }
+        public decimal ChecklistProgressPct { get; set; }
 
         // Joined/Extra fields
         public string ProjectName { get; set; } = string.Empty;

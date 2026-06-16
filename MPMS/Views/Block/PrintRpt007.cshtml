@@ -1,0 +1,298 @@
+@model List<MPMS.Models.TaskBlockLog>
+@{
+    Layout = null;
+    var printTime = (DateTime)ViewBag.PrintTime;
+
+    // Compute stats
+    var totalCount = Model.Count;
+    var resolvedCount = Model.Count(b => b.BlockStatus == "Resolved");
+    var activeCount = Model.Count(b => b.BlockStatus == "Open" || b.BlockStatus == "InProgress" || b.BlockStatus == "WaitingExternal");
+    var overdueCount = Model.Count(b => b.BlockStatus != "Resolved" && b.BlockStatus != "Cancelled" && b.ExpectedResolveDate.HasValue && b.ExpectedResolveDate.Value < DateTime.Today);
+    var avgResolveDays = Model.Where(b => b.BlockStatus == "Resolved" && b.ResolvedAtUtc.HasValue)
+                             .Select(b => (b.ResolvedAtUtc.Value - b.BlockedAtUtc).TotalDays)
+                             .DefaultIfEmpty(0)
+                             .Average();
+
+    // Grouping calculations
+    var typeGroup = Model.GroupBy(l => l.BlockType).Select(g => new {
+        Type = g.Key,
+        Count = g.Count(),
+        Pct = totalCount > 0 ? (double)g.Count() / totalCount * 100 : 0
+    }).OrderByDescending(x => x.Count).ToList();
+
+    var helperGroup = Model.Where(l => l.AssignedHelperUserId.HasValue)
+                          .GroupBy(l => new { l.AssignedHelperUserId, l.HelperName })
+                          .Select(g => new {
+                              Name = g.Key.HelperName,
+                              Assigned = g.Count(),
+                              Resolved = g.Count(l => l.BlockStatus == "Resolved"),
+                              AvgDays = g.Where(l => l.BlockStatus == "Resolved" && l.ResolvedAtUtc.HasValue)
+                                         .Select(l => (l.ResolvedAtUtc.Value - l.BlockedAtUtc).TotalDays)
+                                         .DefaultIfEmpty(0)
+                                         .Average()
+                          }).OrderByDescending(x => x.Assigned).ToList();
+
+    var projGroup = Model.GroupBy(l => l.ProjectName)
+                         .Select(g => new {
+                             Name = g.Key,
+                             Count = g.Count(),
+                             Resolved = g.Count(l => l.BlockStatus == "Resolved"),
+                             AvgDays = g.Where(l => l.BlockStatus == "Resolved" && l.ResolvedAtUtc.HasValue)
+                                        .Select(l => (l.ResolvedAtUtc.Value - l.BlockedAtUtc).TotalDays)
+                                        .DefaultIfEmpty(0)
+                                        .Average()
+                         }).OrderByDescending(x => x.Count).ToList();
+}
+
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="utf-8" />
+    <title>RPT007 - 卡關處理效率報表</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <style>
+        body {
+            font-family: "Microsoft JhengHei", sans-serif;
+            background-color: #fff;
+            color: #333;
+            padding: 20px;
+        }
+        .report-header {
+            border-bottom: 2px solid #333;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .report-title {
+            font-weight: bold;
+            color: #1a1a1a;
+        }
+        .kpi-box {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            background-color: #f9fafb;
+            margin-bottom: 15px;
+        }
+        .kpi-val {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #1e1b4b;
+        }
+        .kpi-title {
+            font-size: 0.8rem;
+            color: #6b7280;
+            text-uppercase: true;
+        }
+        .table-report th {
+            background-color: #f3f4f6 !important;
+            color: #111827;
+            font-weight: bold;
+            border-bottom: 2px solid #d1d5db;
+        }
+        .table-report td, .table-report th {
+            padding: 8px 12px;
+            font-size: 0.85rem;
+            vertical-align: middle;
+        }
+        
+        @@media print {
+            .no-print { display: none; }
+            body { padding: 0; }
+            .kpi-box { background-color: #f9fafb !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .table-report th {
+                background-color: #eaeaea !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- Header -->
+        <div class="report-header d-flex justify-content-between align-items-center">
+            <div>
+                <h3 class="report-title mb-1">🛡️ MPMS 多專案管理系統</h3>
+                <h5 class="text-muted mb-0">RPT007 - PM 卡關處理效率與指標分析報表 (Block Resolution Efficiency Report)</h5>
+            </div>
+            <div class="text-end no-print">
+                <button onclick="window.print()" class="btn btn-warning btn-sm fw-semibold text-dark">🖨️ 列印此報表 (PDF)</button>
+                <button onclick="window.close()" class="btn btn-secondary btn-sm">關閉視窗</button>
+            </div>
+        </div>
+
+        <!-- Meta Info -->
+        <table class="table table-borderless meta-table mb-3" style="font-size: 0.85rem;">
+            <tr>
+                <td style="width: 25%;"><strong>分析時間：</strong> @printTime.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                <td style="width: 25%;"><strong>範疇：</strong> 篩選條件下之所有卡關歷程項目</td>
+                <td style="width: 50%;" class="text-end"><strong>產出對象：</strong> 專案管理處與主管階層效能稽核專用</td>
+            </tr>
+        </table>
+
+        <!-- KPI Summary Cards -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-2.4 col-sm-4">
+                <div class="kpi-box">
+                    <div class="kpi-val">@totalCount</div>
+                    <div class="kpi-title">總卡關申報數</div>
+                </div>
+            </div>
+            <div class="col-md-2.4 col-sm-4">
+                <div class="kpi-box">
+                    <div class="kpi-val text-success">@resolvedCount</div>
+                    <div class="kpi-title">已解除數</div>
+                </div>
+            </div>
+            <div class="col-md-2.4 col-sm-4">
+                <div class="kpi-box">
+                    <div class="kpi-val text-primary">@activeCount</div>
+                    <div class="kpi-title">列管處理中</div>
+                </div>
+            </div>
+            <div class="col-md-2.4 col-sm-6">
+                <div class="kpi-box">
+                    <div class="kpi-val text-danger">@overdueCount</div>
+                    <div class="kpi-title">已逾期未解除</div>
+                </div>
+            </div>
+            <div class="col-md-2.4 col-sm-6">
+                <div class="kpi-box">
+                    <div class="kpi-val">@avgResolveDays.ToString("F1") 天</div>
+                    <div class="kpi-title">排除平均天數</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Classification 1 -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100 border">
+                    <div class="card-header bg-light py-2">
+                        <strong class="text-dark small">📋 1. 卡關問題類型分佈統計 (By Block Type)</strong>
+                    </div>
+                    <div class="card-body p-0">
+                        <table class="table table-report table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th>卡關類型</th>
+                                    <th class="text-center">卡關次數</th>
+                                    <th class="text-end">比例 (%)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (!typeGroup.Any())
+                                {
+                                    <tr><td colspan="3" class="text-center text-muted">無數據。</td></tr>
+                                }
+                                else
+                                {
+                                    foreach (var item in typeGroup)
+                                    {
+                                        var typeText = item.Type switch
+                                        {
+                                            "Technical" => "💻 技術問題",
+                                            "Customer" => "📞 客戶未回覆",
+                                            "Requirement" => "❓ 需求不清",
+                                            "Permission" => "🔑 權限不足",
+                                            "Data" => "📊 資料不足",
+                                            "WaitingOthers" => "⏳ 等待他人",
+                                            "Resource" => "👥 資源不足",
+                                            _ => "📦 其他"
+                                        };
+                                        <tr>
+                                            <td>@typeText</td>
+                                            <td class="text-center">@item.Count 次</td>
+                                            <td class="text-end">@item.Pct.ToString("F1")%</td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Classification 2 -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100 border">
+                    <div class="card-header bg-light py-2">
+                        <strong class="text-dark small">🤝 2. 協助人員排除效率排名 (By Helper Performance)</strong>
+                    </div>
+                    <div class="card-body p-0">
+                        <table class="table table-report table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th>協助人名稱</th>
+                                    <th class="text-center">指派處理數</th>
+                                    <th class="text-center">已排除數</th>
+                                    <th class="text-end">排除平均天數</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (!helperGroup.Any())
+                                {
+                                    <tr><td colspan="4" class="text-center text-muted">目前尚無指派協助人數據。</td></tr>
+                                }
+                                else
+                                {
+                                    foreach (var helperItem in helperGroup)
+                                    {
+                                        <tr>
+                                            <td><strong>@helperItem.Name</strong></td>
+                                            <td class="text-center">@helperItem.Assigned 件</td>
+                                            <td class="text-center">@helperItem.Resolved 件</td>
+                                            <td class="text-end fw-semibold text-indigo-700">@helperItem.AvgDays.ToString("F1") 天</td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Classification 3 -->
+        <div class="card border mb-4">
+            <div class="card-header bg-light py-2">
+                <strong class="text-dark small">🏢 3. 各專案卡關排除統計 (By Project Breakdown)</strong>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-report table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>專案名稱</th>
+                            <th class="text-center">總卡關次數</th>
+                            <th class="text-center">已排除件數</th>
+                            <th class="text-center">進行中件數</th>
+                            <th class="text-end">排除平均天數</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!projGroup.Any())
+                        {
+                            <tr><td colspan="5" class="text-center text-muted">無專案統計數據。</td></tr>
+                        }
+                        else
+                        {
+                            foreach (var p in projGroup)
+                            {
+                                var pActive = Model.Count(l => l.ProjectName == p.Name && (l.BlockStatus == "Open" || l.BlockStatus == "InProgress" || l.BlockStatus == "WaitingExternal"));
+                                <tr>
+                                    <td><strong>@p.Name</strong></td>
+                                    <td class="text-center">@p.Count 件</td>
+                                    <td class="text-center">@p.Resolved 件</td>
+                                    <td class="text-center">@pActive 件</td>
+                                    <td class="text-end fw-bold text-success">@p.AvgDays.ToString("F1") 天</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

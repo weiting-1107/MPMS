@@ -106,6 +106,9 @@
         min-width: 250px !important;
         width: max-content !important;
         white-space: nowrap !important;
+        pointer-events: none !important; /* Prevent hover jitter when mouse moves over the popup */
+        position: absolute !important;
+        transition: left 0.05s ease-out, top 0.05s ease-out !important; /* Smooth tracking */
     }
 
     /* Left Table Row Hover */
@@ -205,6 +208,10 @@
                         <input class="form-check-input" type="checkbox" id="showDays" checked>
                         <label class="form-check-label small fw-bold text-muted" for="showDays">顯示天數</label>
                     </div>
+                    <div class="form-check form-switch d-inline-block ms-3">
+                        <input class="form-check-input" type="checkbox" id="showProgress" checked>
+                        <label class="form-check-label small fw-bold text-muted" for="showProgress">顯示進度%</label>
+                    </div>
                 </div>
             </div>
 
@@ -212,8 +219,6 @@
             <div>
                 <label class="form-label small text-muted mb-1 d-block fw-bold text-end">視圖縮放</label>
                 <div class="btn-group view-btn-group" role="group">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" data-mode="Quarter Day" onclick="changeViewMode('Quarter Day')">6小時</button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" data-mode="Half Day" onclick="changeViewMode('Half Day')">半天</button>
                     <button type="button" class="btn btn-sm btn-outline-secondary" data-mode="Day" onclick="changeViewMode('Day')">天</button>
                     <button type="button" class="btn btn-sm btn-outline-secondary" data-mode="Week" onclick="changeViewMode('Week')">週</button>
                     <button type="button" class="btn btn-sm btn-outline-secondary active" data-mode="Month" onclick="changeViewMode('Month')">月</button>
@@ -227,13 +232,14 @@
         <div class="card-body p-0 d-flex position-relative border" style="height: 600px; background-color: #ffffff; overflow: hidden;">
             
             <!-- Left Side Table (Fixed Width) -->
-            <div class="border-end d-flex flex-column" style="width: 380px; flex-shrink: 0; z-index: 10; background-color: #fafafa; min-height: 0;">
+            <div class="border-end d-flex flex-column" style="width: 420px; flex-shrink: 0; z-index: 10; background-color: #fafafa; min-height: 0;">
                 <!-- Header (Must match Gantt's actual first row Y offset = 59px exactly to align) -->
                 <div class="border-bottom d-flex align-items-center px-3 fw-bold text-muted" style="height: 59px; flex-shrink: 0; font-size: 0.85rem; background-color: #f1f5f9; box-sizing: border-box;">
                     <div class="flex-grow-1 text-truncate">任務 / 階段名稱</div>
                     <div id="header-owner" style="width: 70px;" class="flex-shrink-0">主辦人</div>
                     <div id="header-period" style="width: 100px; display: none;" class="flex-shrink-0">期間</div>
                     <div id="header-days" style="width: 60px;" class="text-end flex-shrink-0">天數</div>
+                    <div id="header-progress" style="width: 60px;" class="text-end flex-shrink-0">進度</div>
                 </div>
                 <!-- Rows Body (Scroll synced) -->
                 <div id="left-table-body" style="overflow-y: auto; overflow-x: hidden; flex-grow: 1; min-height: 0; height: 0;">
@@ -330,6 +336,57 @@
     </div>
 </div>
 
+<!-- Modal: Task Progress Update -->
+<div class="modal fade" id="progressModal" tabindex="-1" aria-labelledby="progressModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-3 border-0 shadow">
+            <div class="modal-header" style="background: linear-gradient(135deg, #1e293b, #0f172a); color: #f8fafc;">
+                <h5 class="modal-title fw-bold" id="progressModalLabel">📊 更新任務進度</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <p class="fw-semibold text-dark mb-1" id="progressModalTaskName">任務名稱</p>
+                    <span class="badge bg-secondary" id="progressModalStatus">狀態</span>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label fw-bold small text-muted">完成進度 (%)</label>
+                    <div class="d-flex align-items-center gap-3">
+                        <input type="range" class="form-range flex-grow-1" id="progressSlider" min="0" max="100" step="5" value="0" oninput="syncProgressInput(this.value)">
+                        <div class="input-group" style="width: 90px;">
+                            <input type="number" class="form-control form-control-sm text-center fw-bold" id="progressInput" min="0" max="100" step="1" value="0" oninput="syncProgressSlider(this.value)">
+                            <span class="input-group-text small">%</span>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <div class="progress rounded-pill" style="height: 12px;">
+                            <div class="progress-bar rounded-pill" id="progressPreviewBar" role="progressbar" style="width: 0%; background: linear-gradient(90deg, #6366f1, #8b5cf6);" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                        <div class="d-flex justify-content-between small text-muted mt-1">
+                            <span>0%</span>
+                            <span id="progressPreviewText" class="fw-bold text-indigo-700">0%</span>
+                            <span>100%</span>
+                        </div>
+                    </div>
+                </div>
+                <div id="progressModalWarning" class="alert alert-info small py-2 border-0 d-none">
+                    ℹ️ 此階段使用 <strong>自動計算</strong> 模式，儲存後階段進度將自動由所有任務進度的平均值計算。
+                </div>
+                <div id="progressModalError" class="alert alert-danger small py-2 border-0 d-none"></div>
+            </div>
+            <div class="modal-footer border-0">
+                <div class="d-flex w-100 justify-content-between align-items-center">
+                    <a id="progressModalDetailLink" href="#" class="btn btn-sm btn-outline-secondary">🔗 查看任務詳情</a>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="button" class="btn btn-primary px-4 fw-bold" onclick="submitProgressUpdate()" id="progressModalSaveBtn">💾 儲存進度</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Anti-forgery Token -->
 <form id="antiforgery-form">
     @Html.AntiForgeryToken()
@@ -356,6 +413,7 @@
         document.getElementById("showOwner").addEventListener("change", renderFilteredGantt);
         document.getElementById("showPeriod").addEventListener("change", renderFilteredGantt);
         document.getElementById("showDays").addEventListener("change", renderFilteredGantt);
+        document.getElementById("showProgress").addEventListener("change", renderFilteredGantt);
 
         // Bind hover events for Gantt chart bars
         document.addEventListener('mouseover', function(e) {
@@ -384,6 +442,22 @@
                 }
             }
         });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!ganttInstance || !currentHoveredBarId) return;
+            const popup = document.querySelector('.gantt-container .popup-wrapper');
+            if (popup) {
+                const ganttContainer = document.querySelector('#gantt-container .gantt-container');
+                if (ganttContainer) {
+                    const rect = ganttContainer.getBoundingClientRect();
+                    const x = e.clientX - rect.left + ganttContainer.scrollLeft;
+                    const y = e.clientY - rect.top + ganttContainer.scrollTop;
+                    
+                    popup.style.left = (x + 15) + 'px';
+                    popup.style.top = (y + 10) + 'px';
+                }
+            }
+        });
     });
 
     function loadGanttData() {
@@ -399,8 +473,7 @@
             });
     }
 
-    function getWorkDays(startStr, endStr, isMilestone) {
-        if (isMilestone) return 0;
+    function getWorkDays(startStr, endStr) {
         const start = new Date(startStr);
         const end = new Date(endStr);
         if (isNaN(start) || isNaN(end)) return 0;
@@ -428,6 +501,7 @@
         const showOwner = document.getElementById("showOwner").checked;
         const showPeriod = document.getElementById("showPeriod").checked;
         const showDays = document.getElementById("showDays").checked;
+        const showProgress = document.getElementById("showProgress").checked;
 
         // Setup left table headers
         document.getElementById('header-owner').style.display = showOwner ? 'block' : 'none';
@@ -436,14 +510,17 @@
 
         // Filter algorithm
         let filtered = rawGanttData.filter(item => {
-            if (item.type === 'phase') return true; // always show phases
+            if (milestoneOnly && item.type === 'phase') {
+                return false;
+            }
+            if (item.type === 'phase') return true;
             
             // Status check
             if (statusVal !== 'All' && item.status !== statusVal) {
                 return false;
             }
             // Milestone check
-            if (milestoneOnly && item.type !== 'milestone') {
+            if (milestoneOnly && !item.isMilestone) {
                 return false;
             }
             return true;
@@ -456,7 +533,7 @@
                 baseName = item.phaseName ? `【階段】${item.phaseName}` : item.name.split(' (')[0];
             } else {
                 baseName = item.taskTitle || item.name.split(' (')[0];
-                if (item.type === 'milestone' && !baseName.startsWith('◆ ')) {
+                if (item.isMilestone && !baseName.startsWith('◆ ')) {
                     baseName = '◆ ' + baseName;
                 }
             }
@@ -495,6 +572,13 @@
                 nameDiv.style.paddingLeft = '15px';
             }
             nameDiv.textContent = item.cleanName;
+            if (item.type !== 'phase' && item.checklistCount > 0) {
+                const badge = document.createElement('span');
+                badge.className = 'ms-2 px-1 rounded text-primary bg-light border';
+                badge.style.fontSize = '0.65rem';
+                badge.textContent = `✅ ${item.checklistDoneCount}/${item.checklistCount}`;
+                nameDiv.appendChild(badge);
+            }
             row.appendChild(nameDiv);
 
             if (showOwner) {
@@ -517,14 +601,28 @@
                 const daysDiv = document.createElement('div');
                 daysDiv.className = 'text-truncate text-muted text-end flex-shrink-0';
                 daysDiv.style.width = '60px';
-                const days = getWorkDays(item.start, item.end, item.type === 'milestone');
+                const days = getWorkDays(item.start, item.end);
                 daysDiv.textContent = item.type === 'phase' ? '' : `${days}天`;
                 row.appendChild(daysDiv);
+            }
+            
+            if (showProgress) {
+                const progressDiv = document.createElement('div');
+                progressDiv.className = 'text-truncate text-muted text-end flex-shrink-0';
+                progressDiv.style.width = '60px';
+                progressDiv.textContent = `${item.progress}%`;
+                row.appendChild(progressDiv);
             }
 
             if(item.type !== 'phase') {
                 row.addEventListener('click', () => {
-                    window.location.href = `/Task/Details/${item.realId}`;
+                    // Find the task in rawGanttData by realId and open progress modal or navigate
+                    const taskData = rawGanttData.find(t => t.type === 'task' && t.realId === item.realId);
+                    if (taskData) {
+                        openProgressModal(taskData);
+                    } else {
+                        window.location.href = `/Task/Details/${item.realId}`;
+                    }
                 });
             }
 
@@ -551,7 +649,7 @@
 
         // Instantiate Gantt
         ganttInstance = new Gantt("#gantt-chart-svg", filtered, {
-            view_modes: ['Quarter Day', 'Half Day', 'Day', 'Week', 'Month'],
+            view_modes: ['Day', 'Week', 'Month'],
             view_mode: currentViewMode,
             language: 'zh',
             popup_trigger: 'none',
@@ -560,27 +658,47 @@
                 const cleanName = task.name.split(' (')[0];
                 
                 if (task.type === 'phase') {
+                    const modeLabel = task.progressMode === 'Auto' ? '🔄 自動計算' : '✋ 手動設定';
+                    const modeColor = task.progressMode === 'Auto' ? '#10b981' : '#6366f1';
                     return `
-                        <div class="details-container p-2 text-white" style="min-width: 180px; text-align: left;">
+                        <div class="details-container p-2 text-white" style="min-width: 200px; text-align: left;">
                             <h6 class="fw-bold mb-2 border-bottom border-secondary pb-1">${cleanName}</h6>
                             <p class="mb-1 small text-info">📍 專案階段</p>
                             <p class="mb-1 small">🚀 進度: <strong>${task.progress}%</strong></p>
+                            <div style="background: #374151; border-radius: 4px; height: 6px; margin-bottom: 8px;">
+                                <div style="background: #8b5cf6; border-radius: 4px; height: 100%; width: ${Math.min(task.progress, 100)}%; transition: width 0.3s;"></div>
+                            </div>
+                            <p class="mb-0 small" style="color: ${modeColor};">${modeLabel}</p>
                             <p class="mb-0 small text-light">📅 期間: ${task.start} ~ ${task.end}</p>
                         </div>
                     `;
                 }
+                const progressColor = task.progress >= 100 ? '#10b981' : task.progress >= 60 ? '#3b82f6' : task.progress >= 30 ? '#f59e0b' : '#6b7280';
+                const checklistHtml = (task.checklistCount > 0) 
+                    ? `<p class="mb-1 small">✅ 檢核清單: <span class="text-info">${task.checklistDoneCount}/${task.checklistCount} (${task.checklistProgressPct}%)</span></p>`
+                    : '';
                 return `
-                    <div class="details-container p-2 text-white" style="min-width: 200px; text-align: left;">
+                    <div class="details-container p-2 text-white" style="min-width: 220px; text-align: left;">
                         <h6 class="fw-bold mb-2 border-bottom border-secondary pb-1">${cleanName}</h6>
                         <p class="mb-1 small">👤 主辦人: <span class="text-warning">${task.owner || '未指派'}</span></p>
                         <p class="mb-1 small">📌 狀態: <span class="text-info">${task.status}</span></p>
+                        ${checklistHtml}
+                        <p class="mb-1 small">🚀 完成進度: <strong style="color: ${progressColor};">${task.progress}%</strong></p>
+                        <div style="background: #374151; border-radius: 4px; height: 6px; margin-bottom: 8px;">
+                            <div style="background: ${progressColor}; border-radius: 4px; height: 100%; width: ${Math.min(task.progress, 100)}%; transition: width 0.3s;"></div>
+                        </div>
                         <p class="mb-0 small text-light">📅 期間: ${task.start} ~ ${task.end}</p>
+                        ${isPmOrAdmin ? '<p class="mb-0 small text-warning mt-1">👆 點擊條目更新進度</p>' : ''}
                     </div>
                 `;
             },
             on_click: function(task) {
                 if (task.type !== 'phase') {
-                    window.location.href = `/Task/Details/${task.realId}`;
+                    if (isPmOrAdmin) {
+                        openProgressModal(task);
+                    } else {
+                        alert("只有專案經理 (PM) 可以調整進度。");
+                    }
                 }
             },
             on_date_change: function(task, start, end) {
@@ -726,10 +844,7 @@
             }
         });
 
-        if (ganttInstance) {
-            ganttInstance.change_view_mode(mode);
-            setTimeout(adjustGanttLabels, 50);
-        }
+        renderFilteredGantt();
     }
 
     function formatDate(date) {
@@ -869,6 +984,141 @@
         .catch(() => {
             errDiv.textContent = '伺服器連線異常，請稍後再試。';
             errDiv.classList.remove('d-none');
+        });
+    }
+</script>
+
+<script>
+    // ── Task Progress Update Functions ─────────────────────────
+    let currentProgressTask = null;
+
+    function openProgressModal(task) {
+        currentProgressTask = task;
+        const modal = new bootstrap.Modal(document.getElementById('progressModal'));
+        
+        // Set task info
+        document.getElementById('progressModalTaskName').textContent = task.taskTitle || task.cleanName || task.name;
+        document.getElementById('progressModalDetailLink').href = `/Task/Details/${task.realId}`;
+        
+        // Set status badge
+        const statusEl = document.getElementById('progressModalStatus');
+        const statusMap = { 'Todo': '待處理', 'Progress': '進行中', 'Blocked': '卡關中', 'Reviewing': '審查中', 'Done': '已完成' };
+        const statusColorMap = { 'Todo': 'secondary', 'Progress': 'primary', 'Blocked': 'danger', 'Reviewing': 'warning', 'Done': 'success' };
+        statusEl.textContent = statusMap[task.status] || task.status;
+        statusEl.className = `badge bg-${statusColorMap[task.status] || 'secondary'}`;
+        
+        // Set progress values
+        const currentProgress = task.progressPct ?? task.progress ?? 0;
+        document.getElementById('progressSlider').value = currentProgress;
+        document.getElementById('progressInput').value = currentProgress;
+        updateProgressPreview(currentProgress);
+        
+        // Show auto mode warning if applicable
+        const phaseData = rawGanttData.find(p => p.type === 'phase' && p.realId && rawGanttData.find(t => t.type === 'task' && t.realId === task.realId && t.id.startsWith(`task_`)));
+        // Simpler: find the phase by checking if task belongs to it by looking at the data
+        const warningEl = document.getElementById('progressModalWarning');
+        // Find the parent phase by iterating through gantt data in order
+        let isAutoPhase = false;
+        let prevPhase = null;
+        for (const item of rawGanttData) {
+            if (item.type === 'phase') prevPhase = item;
+            if (item.type === 'task' && item.realId === task.realId) {
+                if (prevPhase && prevPhase.progressMode === 'Auto') isAutoPhase = true;
+                break;
+            }
+        }
+        if (isAutoPhase) {
+            warningEl.classList.remove('d-none');
+        } else {
+            warningEl.classList.add('d-none');
+        }
+        
+        document.getElementById('progressModalError').classList.add('d-none');
+        document.getElementById('progressModalSaveBtn').disabled = false;
+        document.getElementById('progressModalSaveBtn').textContent = '💾 儲存進度';
+        
+        modal.show();
+    }
+
+    function syncProgressInput(value) {
+        document.getElementById('progressInput').value = value;
+        updateProgressPreview(value);
+    }
+
+    function syncProgressSlider(value) {
+        const v = Math.min(100, Math.max(0, parseInt(value) || 0));
+        document.getElementById('progressSlider').value = v;
+        document.getElementById('progressInput').value = v;
+        updateProgressPreview(v);
+    }
+
+    function updateProgressPreview(value) {
+        const pct = Math.min(100, Math.max(0, parseInt(value) || 0));
+        document.getElementById('progressPreviewBar').style.width = `${pct}%`;
+        document.getElementById('progressPreviewBar').setAttribute('aria-valuenow', pct);
+        document.getElementById('progressPreviewText').textContent = `${pct}%`;
+        
+        // Color based on pct
+        let color;
+        if (pct >= 100) color = 'linear-gradient(90deg, #10b981, #059669)';
+        else if (pct >= 70) color = 'linear-gradient(90deg, #3b82f6, #6366f1)';
+        else if (pct >= 40) color = 'linear-gradient(90deg, #f59e0b, #f97316)';
+        else color = 'linear-gradient(90deg, #6366f1, #8b5cf6)';
+        document.getElementById('progressPreviewBar').style.background = color;
+    }
+
+    function submitProgressUpdate() {
+        if (!currentProgressTask) return;
+        
+        const progressPct = parseInt(document.getElementById('progressInput').value) || 0;
+        if (progressPct < 0 || progressPct > 100) {
+            document.getElementById('progressModalError').textContent = '進度必須在 0~100% 之間！';
+            document.getElementById('progressModalError').classList.remove('d-none');
+            return;
+        }
+
+        const saveBtn = document.getElementById('progressModalSaveBtn');
+        saveBtn.disabled = true;
+        saveBtn.textContent = '⏳ 儲存中...';
+        document.getElementById('progressModalError').classList.add('d-none');
+
+        const token = document.querySelector('#antiforgery-form input[name="__RequestVerificationToken"]').value;
+        
+        fetch('/Gantt/UpdateTaskProgress', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `taskId=${currentProgressTask.realId}&progressPct=${progressPct}&rowVersionStr=${encodeURIComponent(currentProgressTask.rowVersion || '')}&__RequestVerificationToken=${encodeURIComponent(token)}`
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                // Update local data
+                currentProgressTask.progressPct = progressPct;
+                currentProgressTask.progress = progressPct;
+                currentProgressTask.rowVersion = data.newRowVersion;
+                
+                // Update rawGanttData
+                const idx = rawGanttData.findIndex(t => t.type === 'task' && t.realId === currentProgressTask.realId);
+                if (idx !== -1) {
+                    rawGanttData[idx].progressPct = progressPct;
+                    rawGanttData[idx].progress = progressPct;
+                    rawGanttData[idx].rowVersion = data.newRowVersion;
+                }
+                
+                bootstrap.Modal.getInstance(document.getElementById('progressModal')).hide();
+                loadGanttData(); // Refresh to show updated progress bar and phase progress
+            } else {
+                document.getElementById('progressModalError').textContent = data.message || '儲存失敗，請稍後再試。';
+                document.getElementById('progressModalError').classList.remove('d-none');
+                saveBtn.disabled = false;
+                saveBtn.textContent = '💾 儲存進度';
+            }
+        })
+        .catch(() => {
+            document.getElementById('progressModalError').textContent = '伺服器連線異常。';
+            document.getElementById('progressModalError').classList.remove('d-none');
+            saveBtn.disabled = false;
+            saveBtn.textContent = '💾 儲存進度';
         });
     }
 </script>

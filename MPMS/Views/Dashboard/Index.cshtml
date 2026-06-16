@@ -47,6 +47,14 @@
                                         <td>
                                             <a href="/Task/Details/@task.TaskId" class="fw-bold text-decoration-none text-dark">@task.TaskTitle</a>
                                             <br><span class="text-muted small">@task.ProjectName &gt; @task.PhaseName</span>
+                                            @if (task.ChecklistCount > 0)
+                                            {
+                                                <div class="mt-1">
+                                                    <span class="badge bg-light text-primary border" style="font-size: 0.7rem;">
+                                                        ✅ 檢核 @task.ChecklistDoneCount/@task.ChecklistCount (@task.ChecklistProgressPct.ToString("0"))%
+                                                    </span>
+                                                </div>
+                                            }
                                         </td>
                                         <td>@task.OwnerUserName</td>
                                         <td><span class="text-danger small">📅 @task.DueDate.ToString("yyyy-MM-dd")</span></td>

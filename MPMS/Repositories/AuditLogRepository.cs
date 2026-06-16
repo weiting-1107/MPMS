@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Data;
 using System.Threading.Tasks;
 using Dapper;
 using Microsoft.Extensions.Configuration;
@@ -12,15 +13,21 @@ namespace MPMS.Repositories
         {
         }
 
-        public async Task<bool> CreateAuditLogAsync(AuditLog log)
+        public async Task<bool> CreateAuditLogAsync(AuditLog log, IDbConnection? connection = null, IDbTransaction? transaction = null)
         {
             const string sql = @"
                 INSERT INTO dbo.MPMS_AUDIT_LOG (actor_user_id, action_type, target_table, target_id, old_value_json, new_value_json, created_at)
                 VALUES (@ActorUserId, @ActionType, @TargetTable, @TargetId, @OldValueJson, @NewValueJson, GETDATE())";
 
+            if (connection != null)
+            {
+                var rows = await connection.ExecuteAsync(sql, log, transaction);
+                return rows > 0;
+            }
+
             using var conn = CreateConnection();
-            var rows = await conn.ExecuteAsync(sql, log);
-            return rows > 0;
+            var resultRows = await conn.ExecuteAsync(sql, log);
+            return resultRows > 0;
         }
 
         public async Task<IEnumerable<AuditLog>> GetAuditLogsAsync()

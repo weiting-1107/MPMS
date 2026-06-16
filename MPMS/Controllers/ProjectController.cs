@@ -385,7 +385,7 @@ namespace MPMS.Controllers
         [HttpPost]
         [Authorize(Roles = "ADMIN,PM")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AdjustPhaseProgress(int phaseId, decimal manualProgressPct, string phaseStatus)
+        public async Task<IActionResult> AdjustPhaseProgress(int phaseId, decimal manualProgressPct, string phaseStatus, string progressMode = "Manual")
         {
             var phase = await _projectPhaseRepository.GetPhaseByIdAsync(phaseId);
             if (phase == null)
@@ -398,10 +398,27 @@ namespace MPMS.Controllers
                 ModelState.AddModelError(string.Empty, "進度百分比必須介於 0% 到 100% 之間。");
             }
 
+            if (progressMode != "Auto" && progressMode != "Manual")
+            {
+                progressMode = "Manual";
+            }
+
             if (ModelState.IsValid)
             {
                 var oldPhase = await _projectPhaseRepository.GetPhaseByIdAsync(phaseId);
+                
+                // Update progress mode first
+                await _projectPhaseRepository.UpdateProgressModeAsync(phaseId, progressMode);
+
+                // Update progress and status
                 var success = await _projectPhaseRepository.UpdatePhaseProgressAsync(phaseId, manualProgressPct, phaseStatus);
+                
+                // If switching to Auto, recalculate
+                if (progressMode == "Auto")
+                {
+                    await _projectPhaseRepository.RecalculatePhaseProgressAsync(phaseId);
+                }
+
                 if (success)
                 {
                     var updatedPhase = await _projectPhaseRepository.GetPhaseByIdAsync(phaseId);

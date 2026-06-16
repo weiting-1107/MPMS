@@ -1,0 +1,351 @@
+@model MPMS.Models.TaskModel
+
+<div class="card border-0 shadow-sm rounded-4 mb-4" id="checklistPanel">
+    <div class="card-header bg-transparent border-0 pt-4 px-4 d-flex justify-content-between align-items-center">
+        <h5 class="card-title fw-bold text-dark mb-0">
+            ✅ 工作事項檢核清單 
+            <span class="badge bg-primary rounded-pill ms-2" id="cl-progress-badge">0%</span>
+        </h5>
+        <div>
+            <a href="/Checklist/ExportReport?taskId=@Model.TaskId" class="btn btn-sm btn-outline-success rounded-3 me-2" target="_blank" title="匯出 CSV">
+                📥 匯出報表
+            </a>
+            @if (Model.TaskStatus != "Done" && Model.TaskStatus != "Reviewing")
+            {
+                <button class="btn btn-sm btn-primary rounded-3" type="button" onclick="openAddChecklistModal()">
+                    ➕ 新增項目
+                </button>
+            }
+        </div>
+    </div>
+    <div class="card-body px-4 pb-4">
+        <!-- Progress Bar -->
+        <div class="progress mb-4" style="height: 10px; border-radius: 5px;">
+            <div id="cl-progress-bar" class="progress-bar bg-success" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+
+        <div id="checklist-container" class="list-group list-group-flush border-top">
+            <div class="text-center py-4 text-muted small" id="cl-loading">
+                <div class="spinner-border spinner-border-sm me-2" role="status"></div> 載入中...
+            </div>
+            <!-- Checklist items will be injected here via JS -->
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal fade" id="checklistModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header border-bottom-0 pb-0 pt-4 px-4">
+                <h5 class="modal-title fw-bold" id="checklistModalTitle">新增工作項目</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body px-4 pb-4">
+                <form id="checklistForm">
+                    <input type="hidden" id="cl_id" name="cl_id" value="" />
+                    <input type="hidden" id="cl_rowVersion" name="cl_rowVersion" value="" />
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">項目名稱 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control rounded-3" id="cl_title" required maxlength="300" placeholder="例如：完成首頁切版" />
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">備註說明</label>
+                        <textarea class="form-control rounded-3" id="cl_desc" rows="2" placeholder="詳細說明..."></textarea>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small">預計完成日</label>
+                            <input type="date" class="form-control rounded-3" id="cl_dueDate" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small">指定處理人</label>
+                            <select class="form-select rounded-3" id="cl_assignedUserId">
+                                <option value="">(未指定)</option>
+                                <option value="@Model.OwnerUserId">@Model.OwnerUserName (負責人)</option>
+                                @for (int i=0; i<Model.AssistUserIds.Count; i++)
+                                {
+                                    <option value="@Model.AssistUserIds[i]">@Model.AssistUserNames[i] (協辦)</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer border-top-0 pt-0 px-4 pb-4">
+                <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary rounded-3" onclick="saveChecklist()">儲存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .checklist-item {
+        transition: all 0.2s ease;
+    }
+    .checklist-item:hover {
+        background-color: #f8f9fa;
+    }
+    .checklist-item.done .cl-title {
+        text-decoration: line-through;
+        color: #6c757d;
+    }
+</style>
+
+<script>
+    const CL_TASK_ID = @Model.TaskId;
+    const CL_IS_READONLY = @(Model.TaskStatus == "Done" || Model.TaskStatus == "Reviewing" ? "true" : "false");
+    let checklists = [];
+    let checklistModalInstance = null;
+
+    document.addEventListener("DOMContentLoaded", function () {
+        checklistModalInstance = new bootstrap.Modal(document.getElementById('checklistModal'));
+        loadChecklists();
+    });
+
+    function loadChecklists() {
+        $.getJSON('/Checklist/GetChecklists?taskId=' + CL_TASK_ID, function(res) {
+            if (res.success) {
+                checklists = res.data;
+                renderChecklists();
+            } else {
+                $('#checklist-container').html('<div class="text-center py-4 text-danger small">載入失敗: ' + res.message + '</div>');
+            }
+        }).fail(function(jqXHR, textStatus, errorThrown) {
+            $('#checklist-container').html('<div class="text-center py-4 text-danger small">載入失敗 (HTTP ' + jqXHR.status + '): 發生系統錯誤，請聯絡管理員。</div>');
+            console.error('Checklist Load Error:', jqXHR.responseText);
+        });
+    }
+
+    function renderChecklists() {
+        const container = $('#checklist-container');
+        container.empty();
+
+        const reviewContainer = $('#review-checklist-container');
+        if (reviewContainer.length) {
+            reviewContainer.empty();
+        }
+
+        if (checklists.length === 0) {
+            container.html('<div class="text-center py-4 text-muted small">尚未新增任何檢核項目。</div>');
+            if (reviewContainer.length) {
+                reviewContainer.html('<div class="text-center py-2 text-muted small">尚未新增任何檢核項目。</div>');
+            }
+            updateProgress();
+            return;
+        }
+
+        let html = '';
+        let reviewHtml = '';
+        checklists.forEach(function(item) {
+            const isDone = item.isDone;
+            const itemClass = isDone ? 'done' : '';
+            const checkedAttr = isDone ? 'checked' : '';
+            const disabledAttr = CL_IS_READONLY ? 'disabled' : '';
+            
+            let badges = '';
+            if (item.dueDate) {
+                badges += `<span class="badge bg-light text-dark border ms-2 fw-normal"><i class="bi bi-calendar"></i> ${item.dueDate.substring(0, 10)}</span>`;
+            }
+            if (item.assignedUserName) {
+                badges += `<span class="badge bg-light text-primary border ms-2 fw-normal"><i class="bi bi-person"></i> ${item.assignedUserName}</span>`;
+            }
+            if (isDone && item.doneByUserName) {
+                badges += `<span class="badge bg-success bg-opacity-10 text-success border border-success ms-2 fw-normal">✔ ${item.doneByUserName}</span>`;
+            }
+
+            html += `
+                <div class="list-group-item px-3 py-3 border-0 border-bottom checklist-item ${itemClass}">
+                    <div class="d-flex align-items-start">
+                        <div class="form-check fs-5 me-3">
+                            <input class="form-check-input border-secondary cursor-pointer" type="checkbox" 
+                                   onchange="toggleChecklistStatus(${item.checklistId}, this.checked)" ${checkedAttr} ${disabledAttr}>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span class="cl-title fw-semibold">${escapeHtml(item.checklistTitle)}</span>
+                                    ${badges}
+                                </div>
+                                ${!CL_IS_READONLY ? `
+                                    <div>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 rounded-2" onclick="openEditChecklistModal(${item.checklistId})" title="編輯">✏️</button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 rounded-2 ms-1" onclick="deleteChecklist(${item.checklistId})" title="刪除">🗑️</button>
+                                    </div>
+                                ` : ''}
+                            </div>
+                            ${item.checklistDesc ? `<div class="small text-muted mt-1 cl-title">${escapeHtml(item.checklistDesc).replace(/\\n/g, '<br>')}</div>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            if (reviewContainer.length) {
+                const checkedMark = isDone ? '🟢' : '⚪';
+                const textStyle = isDone ? 'text-decoration: line-through; color: #6c757d;' : 'font-weight: 500;';
+                reviewHtml += `
+                    <div class="d-flex align-items-center justify-content-between py-1 border-bottom border-light-subtle">
+                        <div class="d-flex align-items-center text-truncate">
+                            <span class="me-2">${checkedMark}</span>
+                            <span style="${textStyle}" class="text-truncate">${escapeHtml(item.checklistTitle)}</span>
+                        </div>
+                        <div class="text-nowrap ms-2">
+                            ${item.assignedUserName ? `<span class="badge bg-light text-primary border fw-normal" style="font-size: 0.7rem;">${item.assignedUserName}</span>` : ''}
+                        </div>
+                    </div>
+                `;
+            }
+        });
+
+        container.html(html);
+        if (reviewContainer.length) {
+            reviewContainer.html(reviewHtml);
+        }
+        updateProgress();
+    }
+
+    function updateProgress() {
+        const total = checklists.length;
+        const doneCount = checklists.filter(c => c.isDone).length;
+        const pct = total === 0 ? 0 : Math.round((doneCount / total) * 100);
+        
+        $('#cl-progress-bar').css('width', pct + '%');
+        $('#cl-progress-badge').text(pct + '%');
+    }
+
+    function openAddChecklistModal() {
+        $('#cl_id').val('');
+        $('#cl_rowVersion').val('');
+        $('#cl_title').val('');
+        $('#cl_desc').val('');
+        $('#cl_dueDate').val('');
+        $('#cl_assignedUserId').val('');
+        $('#checklistModalTitle').text('➕ 新增工作項目');
+        checklistModalInstance.show();
+    }
+
+    function openEditChecklistModal(id) {
+        const item = checklists.find(c => c.checklistId === id);
+        if (!item) return;
+
+        $('#cl_id').val(item.checklistId);
+        $('#cl_rowVersion').val(item.rowVersion);
+        $('#cl_title').val(item.checklistTitle);
+        $('#cl_desc').val(item.checklistDesc);
+        $('#cl_dueDate').val(item.dueDate ? item.dueDate.substring(0, 10) : '');
+        $('#cl_assignedUserId').val(item.assignedUserId || '');
+        $('#checklistModalTitle').text('✏️ 編輯工作項目');
+        checklistModalInstance.show();
+    }
+
+    function saveChecklist() {
+        const id = $('#cl_id').val();
+        const title = $('#cl_title').val().trim();
+        
+        if (!title) {
+            alert('請填寫項目名稱');
+            return;
+        }
+
+        const data = {
+            taskId: CL_TASK_ID,
+            checklistId: id ? parseInt(id) : 0,
+            checklistTitle: title,
+            checklistDesc: $('#cl_desc').val().trim() || null,
+            dueDate: $('#cl_dueDate').val() || null,
+            assignedUserId: $('#cl_assignedUserId').val() ? parseInt($('#cl_assignedUserId').val()) : null,
+            rowVersion: id ? $('#cl_rowVersion').val() : null
+        };
+
+        const url = id ? '/Checklist/Update' : '/Checklist/Create';
+        
+        $.ajax({
+            url: url,
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(data),
+            success: function(res) {
+                if (res.success) {
+                    checklistModalInstance.hide();
+                    loadChecklists(); // Reload from server to get joined names and rowversion
+                } else {
+                    alert('儲存失敗：\n' + res.message);
+                }
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                let msg = '儲存失敗 (HTTP ' + jqXHR.status + ')';
+                if (jqXHR.responseJSON && jqXHR.responseJSON.message) {
+                    msg += '：\n' + jqXHR.responseJSON.message;
+                } else if (jqXHR.responseText) {
+                    try {
+                        const parsed = JSON.parse(jqXHR.responseText);
+                        if (parsed.title) msg += '：\n' + parsed.title;
+                    } catch (e) {
+                        // ignore
+                    }
+                }
+                alert(msg + '\n請檢查輸入格式或聯絡管理員。');
+            }
+        });
+    }
+
+    function toggleChecklistStatus(id, isDone) {
+        const item = checklists.find(c => c.checklistId === id);
+        if (!item) return;
+
+        $.ajax({
+            url: '/Checklist/ToggleStatus',
+            type: 'POST',
+            data: {
+                checklistId: id,
+                isDone: isDone,
+                rowVersionStr: item.rowVersion
+            },
+            success: function(res) {
+                if (res.success) {
+                    loadChecklists();
+                } else {
+                    alert(res.message);
+                    loadChecklists(); // Revert check state visually
+                }
+            }
+        });
+    }
+
+    function deleteChecklist(id) {
+        if (!confirm('確定要刪除此工作項目嗎？')) return;
+        
+        const item = checklists.find(c => c.checklistId === id);
+        if (!item) return;
+
+        $.ajax({
+            url: '/Checklist/Delete',
+            type: 'POST',
+            data: {
+                checklistId: id,
+                rowVersionStr: item.rowVersion
+            },
+            success: function(res) {
+                if (res.success) {
+                    loadChecklists();
+                } else {
+                    alert(res.message);
+                }
+            }
+        });
+    }
+
+    function escapeHtml(unsafe) {
+        if (!unsafe) return "";
+        return unsafe
+             .replace(/&/g, "&amp;")
+             .replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;")
+             .replace(/"/g, "&quot;")
+             .replace(/'/g, "&#039;");
+    }
+</script>

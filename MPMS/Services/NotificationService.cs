@@ -84,6 +84,78 @@ namespace MPMS.Services
             }
         }
 
+        // Convenience handlers for V0.7 Block events
+
+        public async Task<bool> SendTaskBlockedNotificationAsync(int receiverUserId, string taskTitle, string reporterName, string blockReason, int taskId)
+        {
+            return await SendNotificationAsync(
+                receiverUserId: receiverUserId,
+                eventType: "TaskBlocked",
+                title: "任務卡關申報 🚨",
+                message: $"任務「{taskTitle}」被申報卡關。申報人：{reporterName}。原因：{blockReason}",
+                refType: "TASK",
+                refId: taskId,
+                sendEmail: true
+            );
+        }
+
+        public async Task<bool> SendBlockAssignedNotificationAsync(int receiverUserId, string taskTitle, string pmName, string helperName, string helpNeeded, int taskId)
+        {
+            return await SendNotificationAsync(
+                receiverUserId: receiverUserId,
+                eventType: "BlockAssigned",
+                title: "卡關處理指派 🤝",
+                message: $"PM {pmName} 指派了協助人：{helperName}。任務「{taskTitle}」。需要協助事項：{helpNeeded}",
+                refType: "TASK",
+                refId: taskId,
+                sendEmail: true
+            );
+        }
+
+        public async Task<bool> SendBlockUpdatedNotificationAsync(int receiverUserId, string taskTitle, string commenterName, string commentText, int taskId)
+        {
+            return await SendNotificationAsync(
+                receiverUserId: receiverUserId,
+                eventType: "BlockUpdated",
+                title: "卡關處理更新 💬",
+                message: $"成員 {commenterName} 在任務「{taskTitle}」的卡關係統中留言：{commentText}",
+                refType: "TASK",
+                refId: taskId,
+                sendEmail: true
+            );
+        }
+
+        public async Task<bool> SendBlockResolvedNotificationAsync(int receiverUserId, string taskTitle, string resolverName, string resolveSummary, int taskId)
+        {
+            return await SendNotificationAsync(
+                receiverUserId: receiverUserId,
+                eventType: "BlockResolved",
+                title: "卡關排除解除 🔓",
+                message: $"任務「{taskTitle}」的卡關已被 {resolverName} 解除，任務狀態回到進行中。解除說明：{resolveSummary}",
+                refType: "TASK",
+                refId: taskId,
+                sendEmail: true
+            );
+        }
+
+        public async Task<bool> SendBlockDueSoonNotificationAsync(int receiverUserId, string taskTitle, string helperName, DateTime expectedResolveDate, int taskId, bool isOverdue)
+        {
+            var title = isOverdue ? "卡關排除已逾期 ⚠️" : "卡關排除即將到期 ⏰";
+            var message = isOverdue
+                ? $"任務「{taskTitle}」的卡關排除已逾期！協助人：{helperName}。預計解除日為：{expectedResolveDate:yyyy-MM-dd}，請儘速處理。"
+                : $"任務「{taskTitle}」的卡關排除將於 {expectedResolveDate:yyyy-MM-dd} 到期。協助人：{helperName}，請追蹤進度。";
+
+            return await SendNotificationAsync(
+                receiverUserId: receiverUserId,
+                eventType: "BlockDueSoon",
+                title: title,
+                message: message,
+                refType: "TASK",
+                refId: taskId,
+                sendEmail: true
+            );
+        }
+
         // Get all notifications for user
         public async Task<IEnumerable<Notification>> GetUserNotificationsAsync(int userId)
         {

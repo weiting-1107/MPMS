@@ -1,3 +1,4 @@
+using System.Data;
 using System.Text.Json;
 using System.Threading.Tasks;
 using MPMS.Models;
@@ -17,7 +18,7 @@ namespace MPMS.Services
         /// <summary>
         /// Logs an audit record for an operation.
         /// </summary>
-        public async Task LogAsync(int actorUserId, string actionType, string targetTable, string targetId, object? oldValue = null, object? newValue = null)
+        public async Task LogAsync(int actorUserId, string actionType, string targetTable, string targetId, object? oldValue = null, object? newValue = null, IDbConnection? conn = null, IDbTransaction? trans = null)
         {
             var oldJson = oldValue != null ? JsonSerializer.Serialize(oldValue) : null;
             var newJson = newValue != null ? JsonSerializer.Serialize(newValue) : null;
@@ -32,7 +33,7 @@ namespace MPMS.Services
                 NewValueJson = newJson
             };
 
-            await _auditLogRepository.CreateAuditLogAsync(log);
+            await _auditLogRepository.CreateAuditLogAsync(log, conn, trans);
         }
     }
 }

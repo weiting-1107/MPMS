@@ -97,6 +97,36 @@ namespace MPMS.Repositories
             return rows > 0;
         }
 
+        public async Task<bool> UpdateProgressModeAsync(int phaseId, string progressMode)
+        {
+            const string sql = @"
+                UPDATE dbo.MPMS_PROJECT_PHASE
+                SET progress_mode = @ProgressMode,
+                    updated_at = GETDATE()
+                WHERE phase_id = @PhaseId";
+
+            using var conn = CreateConnection();
+            var rows = await conn.ExecuteAsync(sql, new { PhaseId = phaseId, ProgressMode = progressMode });
+            return rows > 0;
+        }
+
+        // Recalculate phase progress based on average task progress (used for Auto mode)
+        public async Task RecalculatePhaseProgressAsync(int phaseId)
+        {
+            const string sql = @"
+                UPDATE dbo.MPMS_PROJECT_PHASE
+                SET manual_progress_pct = (
+                    SELECT ISNULL(AVG(CAST(manual_progress_pct AS FLOAT)), 0)
+                    FROM dbo.MPMS_TASK
+                    WHERE phase_id = @PhaseId
+                ),
+                updated_at = GETDATE()
+                WHERE phase_id = @PhaseId AND progress_mode = 'Auto'";
+
+            using var conn = CreateConnection();
+            await conn.ExecuteAsync(sql, new { PhaseId = phaseId });
+        }
+
         // Delete phase and all its tasks (cascade) in a transaction
         public async Task<bool> DeletePhaseAsync(int phaseId)
         {

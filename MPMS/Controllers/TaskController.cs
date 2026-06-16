@@ -25,6 +25,7 @@ namespace MPMS.Controllers
         private readonly AuditService _auditService;
         private readonly Microsoft.AspNetCore.SignalR.IHubContext<MPMS.Hubs.MeetingHub> _hubContext;
         private readonly NotificationService _notificationService;
+        private readonly BlockRepository _blockRepository;
 
         public TaskController(
             TaskRepository taskRepository,
@@ -33,7 +34,8 @@ namespace MPMS.Controllers
             IAttachmentStorageService storageService,
             AuditService auditService,
             Microsoft.AspNetCore.SignalR.IHubContext<MPMS.Hubs.MeetingHub> hubContext,
-            NotificationService notificationService)
+            NotificationService notificationService,
+            BlockRepository blockRepository)
         {
             _taskRepository = taskRepository;
             _projectRepository = projectRepository;
@@ -42,6 +44,7 @@ namespace MPMS.Controllers
             _auditService = auditService;
             _hubContext = hubContext;
             _notificationService = notificationService;
+            _blockRepository = blockRepository;
         }
 
         private int CurrentUserId => int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
@@ -361,6 +364,9 @@ namespace MPMS.Controllers
 
             ViewBag.StatusLogs = statusLogs;
             ViewBag.Reviews = reviews;
+            ViewBag.ActiveBlockLog = await _blockRepository.GetActiveBlockLogByTaskIdAsync(id);
+            ViewBag.AllBlockLogs = await _blockRepository.GetBlockLogsByTaskIdAsync(id);
+            ViewBag.Users = await _taskRepository.GetActiveUsersAsync();
 
             return View(task);
         }
@@ -372,6 +378,20 @@ namespace MPMS.Controllers
         {
             var task = await _taskRepository.GetTaskByIdAsync(taskId);
             if (task == null) return NotFound();
+
+            // V0.7 卡關限制：禁止直接透過 UpdateStatus 切換到 Blocked 狀態
+            if (newStatus == "Blocked")
+            {
+                TempData["ErrorMessage"] = "回報卡關請使用專屬的「卡關申報」功能！";
+                return RedirectToAction(nameof(Details), new { id = taskId });
+            }
+
+            // V0.7 卡關限制：卡關中的任務不可直接修改狀態，必須先解除卡關
+            if (task.TaskStatus == "Blocked")
+            {
+                TempData["ErrorMessage"] = "卡關中的任務狀態無法直接修改，請先進行「解除卡關」！";
+                return RedirectToAction(nameof(Details), new { id = taskId });
+            }
 
             // Employee 權限控管：只能更新自己負責任務
             var isUserAdmin = User.IsInRole("ADMIN");
@@ -627,6 +647,13 @@ namespace MPMS.Controllers
             var task = await _taskRepository.GetTaskByIdAsync(taskId);
             if (task == null) return NotFound();
 
+            // V0.7 卡關限制：Blocked 任務不可送審
+            if (task.TaskStatus == "Blocked")
+            {
+                TempData["ErrorMessage"] = "完工送審失敗！卡關中的任務不可送審，必須先解除卡關。";
+                return RedirectToAction(nameof(Details), new { id = taskId });
+            }
+
             // Employee 權限控管
             if (!User.IsInRole("ADMIN") && !User.IsInRole("PM") && task.OwnerUserId != CurrentUserId)
             {
@@ -815,6 +842,11 @@ namespace MPMS.Controllers
                 TempData["ErrorMessage"] = $"審查發生錯誤：{ex.Message}";
             }
 
+            string? returnUrl = Request.Form["ReturnUrl"];
+            if (!string.IsNullOrEmpty(returnUrl))
+            {
+                return Redirect(returnUrl);
+            }
             return RedirectToAction(nameof(Details), new { id = taskId });
         }
 

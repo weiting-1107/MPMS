@@ -17,7 +17,10 @@ public class Program
         var builder = WebApplication.CreateBuilder(args);
 
         // Add services to the container.
-        builder.Services.AddControllersWithViews();
+        builder.Services.AddControllersWithViews(options =>
+        {
+            options.ModelBinderProviders.Insert(0, new MPMS.ModelBinders.TrimmingModelBinderProvider());
+        });
         
         // Register Repositories
         builder.Services.AddScoped<UserRepository>();
@@ -27,6 +30,8 @@ public class Program
         builder.Services.AddScoped<TaskRepository>();
         builder.Services.AddScoped<MeetingRepository>();
         builder.Services.AddScoped<SnapshotRepository>();
+        builder.Services.AddScoped<BlockRepository>();
+        builder.Services.AddScoped<ChecklistRepository>();
 
         // Register Services
         builder.Services.AddScoped<AuthService>();
@@ -60,6 +65,13 @@ public class Program
                 .ForJob(virusScanJobKey)
                 .WithIdentity("VirusScanJob-trigger")
                 .WithSimpleSchedule(x => x.WithIntervalInSeconds(10).RepeatForever()));
+
+            var blockReminderJobKey = new JobKey("BlockReminderJob");
+            q.AddJob<MPMS.BackgroundJobs.BlockReminderJob>(opts => opts.WithIdentity(blockReminderJobKey));
+            q.AddTrigger(opts => opts
+                .ForJob(blockReminderJobKey)
+                .WithIdentity("BlockReminderJob-trigger")
+                .WithSimpleSchedule(x => x.WithIntervalInSeconds(60).RepeatForever()));
         });
 
         builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);

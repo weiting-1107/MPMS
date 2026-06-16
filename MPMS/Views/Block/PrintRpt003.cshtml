@@ -1,0 +1,178 @@
+@model List<MPMS.Models.TaskBlockLog>
+@{
+    Layout = null;
+    var printTime = (DateTime)ViewBag.PrintTime;
+}
+
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="utf-8" />
+    <title>RPT003 - 卡關任務追蹤報表</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <style>
+        body {
+            font-family: "Microsoft JhengHei", sans-serif;
+            background-color: #fff;
+            color: #333;
+            padding: 20px;
+        }
+        .report-header {
+            border-bottom: 2px solid #333;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .report-title {
+            font-weight: bold;
+            color: #1a1a1a;
+        }
+        .meta-table {
+            font-size: 0.85rem;
+            margin-bottom: 20px;
+        }
+        .table-report th {
+            background-color: #f3f4f6 !important;
+            color: #111827;
+            font-weight: bold;
+            border-bottom: 2px solid #d1d5db;
+        }
+        .table-report td, .table-report th {
+            padding: 8px 12px;
+            font-size: 0.85rem;
+            vertical-align: middle;
+        }
+        .badge-danger { background-color: #dc3545; color: #fff; }
+        .badge-warning { background-color: #ffc107; color: #212529; }
+        .badge-info { background-color: #0dcaf0; color: #000; }
+        .badge-secondary { background-color: #6c757d; color: #fff; }
+        .badge-success { background-color: #198754; color: #fff; }
+        
+        @@media print {
+            .no-print { display: none; }
+            body { padding: 0; }
+            .table-report th {
+                background-color: #eaeaea !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- Header -->
+        <div class="report-header d-flex justify-content-between align-items-center">
+            <div>
+                <h3 class="report-title mb-1">🛡️ MPMS 多專案管理系統</h3>
+                <h5 class="text-muted mb-0">RPT003 - 卡關任務追蹤報表 (Blocked Task Tracking)</h5>
+            </div>
+            <div class="text-end no-print">
+                <button onclick="window.print()" class="btn btn-primary btn-sm">🖨️ 列印此報表 (PDF)</button>
+                <button onclick="window.close()" class="btn btn-secondary btn-sm">關閉視窗</button>
+            </div>
+        </div>
+
+        <!-- Meta Info -->
+        <table class="table table-borderless meta-table mb-3">
+            <tr>
+                <td style="width: 25%;"><strong>列印時間：</strong> @printTime.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                <td style="width: 25%;"><strong>統計筆數：</strong> @Model.Count 筆</td>
+                <td style="width: 50%;" class="text-end"><strong>產出對象：</strong> 專案經理與系統管理員專用資料</td>
+            </tr>
+        </table>
+
+        <!-- Main Data Table -->
+        <div class="table-responsive">
+            <table class="table table-bordered table-report">
+                <thead>
+                    <tr>
+                        <th style="width: 15%;">專案與階段</th>
+                        <th style="width: 20%;">任務名稱</th>
+                        <th style="width: 10%;">負責/協助人員</th>
+                        <th style="width: 10%;">卡關類型</th>
+                        <th style="width: 25%;">卡關原因與協助事項</th>
+                        <th style="width: 8%;" class="text-center">影響/天數</th>
+                        <th style="width: 12%;">預計解除日/狀態</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-muted">目前無符合條件的卡關資料。</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        foreach (var log in Model)
+                        {
+                            var typeText = log.BlockType switch
+                            {
+                                "Technical" => "技術問題",
+                                "Customer" => "客戶未回覆",
+                                "Requirement" => "需求不清",
+                                "Permission" => "權限不足",
+                                "Data" => "資料不足",
+                                "WaitingOthers" => "等待他人",
+                                "Resource" => "資源不足",
+                                _ => "其他"
+                            };
+                            var badgeColor = log.ImpactLevel switch
+                            {
+                                "High" => "badge-danger",
+                                "Medium" => "badge-warning",
+                                "Low" => "badge-info",
+                                _ => "badge-secondary"
+                            };
+                            var statusBadge = log.BlockStatus switch
+                            {
+                                "Open" => "badge-secondary",
+                                "InProgress" => "badge-primary",
+                                "WaitingExternal" => "badge-warning",
+                                "Resolved" => "badge-success",
+                                _ => "badge-secondary"
+                            };
+                            <tr>
+                                <td>
+                                    <strong>@log.ProjectName</strong> <br />
+                                    <span class="text-muted small">@log.PhaseName</span>
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-1">
+                                        @if (log.IsMilestone)
+                                        {
+                                            <span class="badge badge-danger" style="font-size: 0.65rem;">📌 里程碑</span>
+                                        }
+                                        <strong>@log.TaskTitle</strong>
+                                    </div>
+                                </td>
+                                <td>
+                                    負責：@log.OwnerUserName <br />
+                                    協助：@(string.IsNullOrEmpty(log.HelperName) ? "無" : log.HelperName)
+                                </td>
+                                <td>@typeText</td>
+                                <td>
+                                    <strong>原因：</strong> @log.BlockReason <br />
+                                    <strong>協助：</strong> @log.HelpNeeded
+                                    @if (!string.IsNullOrEmpty(log.ResolveSummary))
+                                    {
+                                        <div class="text-success small mt-1"><strong>排除說明：</strong> @log.ResolveSummary</div>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge @badgeColor">@log.ImpactLevel</span> <br />
+                                    <span class="small text-muted d-block mt-1">已卡 @log.BlockedDays 天</span>
+                                </td>
+                                <td>
+                                    <span class="badge @statusBadge">@log.BlockStatus</span> <br />
+                                    <span class="small text-muted d-block mt-1">預計：@(log.ExpectedResolveDate?.ToString("yyyy-MM-dd") ?? "未設定")</span>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

@@ -76,7 +76,8 @@ namespace MPMS.Controllers
                     dependencies = "",
                     custom_class = "gantt-phase-bar",
                     type = "phase",
-                    realId = phase.PhaseId
+                    realId = phase.PhaseId,
+                    progressMode = phase.ProgressMode
                 });
 
                 // 2. Add Task bars belonging to this phase
@@ -89,7 +90,11 @@ namespace MPMS.Controllers
 
                     // Determine custom styling class based on status/dates
                     var customClassList = new List<string>();
-                    if (fullTask.IsMilestone)
+                    if (fullTask.TaskStatus == "Done")
+                    {
+                        customClassList.Add("gantt-done-bar");
+                    }
+                    else if (fullTask.IsMilestone)
                     {
                         customClassList.Add("gantt-milestone-bar");
                     }
@@ -102,9 +107,6 @@ namespace MPMS.Controllers
                                 break;
                             case "Reviewing":
                                 customClassList.Add("gantt-reviewing-bar");
-                                break;
-                            case "Done":
-                                customClassList.Add("gantt-done-bar");
                                 break;
                             default:
                                 customClassList.Add("gantt-default-bar");
@@ -128,19 +130,93 @@ namespace MPMS.Controllers
                         taskTitle = fullTask.TaskTitle,
                         start = fullTask.PlannedStartDate?.ToString("yyyy-MM-dd") ?? fullTask.DueDate.AddDays(-7).ToString("yyyy-MM-dd"),
                         end = fullTask.DueDate.ToString("yyyy-MM-dd"),
-                        progress = fullTask.TaskStatus == "Done" ? 100 : 0,
+                        progress = fullTask.TaskStatus == "Done" ? 100 : (int)fullTask.ManualProgressPct,
                         dependencies = string.Join(",", dependencyIds),
                         custom_class = string.Join(" ", customClassList),
-                        type = fullTask.IsMilestone ? "milestone" : "task",
+                        type = "task",
+                        isMilestone = fullTask.IsMilestone,
                         realId = fullTask.TaskId,
                         status = fullTask.TaskStatus,
                         owner = fullTask.OwnerUserName,
-                        rowVersion = fullTask.RowVersion != null ? Convert.ToBase64String(fullTask.RowVersion) : ""
+                        progressPct = (int)fullTask.ManualProgressPct,
+                        rowVersion = fullTask.RowVersion != null ? Convert.ToBase64String(fullTask.RowVersion) : "",
+                        checklistCount = fullTask.ChecklistCount,
+                        checklistDoneCount = fullTask.ChecklistDoneCount,
+                        checklistProgressPct = fullTask.ChecklistProgressPct
                     });
                 }
             }
 
             return Json(ganttTasks);
+        }
+
+        // POST: Gantt/UpdateTaskProgress
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateTaskProgress(int taskId, decimal progressPct, string rowVersionStr)
+        {
+            var task = await _taskRepository.GetTaskByIdAsync(taskId);
+            if (task == null) return Json(new { success = false, message = "找不到該任務。" });
+
+            // Permission: Only PM, Admin can update progress
+            var isAdmin = User.IsInRole("ADMIN");
+            var isPm = User.IsInRole("PM");
+
+            if (!isAdmin && !isPm)
+            {
+                return Json(new { success = false, message = "權限不足！只有專案經理 (PM) 才可以調整進度。" });
+            }
+
+            if (progressPct < 0 || progressPct > 100)
+            {
+                return Json(new { success = false, message = "進度必須在 0~100 之間。" });
+            }
+
+            try
+            {
+                byte[] rowVersion = Convert.FromBase64String(rowVersionStr);
+                var success = await _taskRepository.UpdateTaskProgressAsync(taskId, progressPct, CurrentUserId, rowVersion);
+                if (!success)
+                    return Json(new { success = false, message = "更新失敗，資料可能已被他人修改。" });
+
+                // If phase is in Auto mode, recalculate phase progress
+                await _projectPhaseRepository.RecalculatePhaseProgressAsync(task.PhaseId);
+
+                await _hubContext.Clients.All.SendAsync("TaskUpdated", taskId);
+
+                var updatedTask = await _taskRepository.GetTaskByIdAsync(taskId);
+                return Json(new { 
+                    success = true, 
+                    newProgressPct = progressPct,
+                    newRowVersion = updatedTask?.RowVersion != null ? Convert.ToBase64String(updatedTask.RowVersion) : ""
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, message = $"更新進度發生錯誤：{ex.Message}" });
+            }
+        }
+
+        // POST: Gantt/UpdatePhaseProgressMode
+        [HttpPost]
+        [Authorize(Roles = "ADMIN,PM")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdatePhaseProgressMode(int phaseId, string progressMode)
+        {
+            if (progressMode != "Auto" && progressMode != "Manual")
+                return Json(new { success = false, message = "無效的進度模式。" });
+
+            var success = await _projectPhaseRepository.UpdateProgressModeAsync(phaseId, progressMode);
+            if (!success)
+                return Json(new { success = false, message = "更新進度模式失敗。" });
+
+            // If switching to Auto, recalculate immediately
+            if (progressMode == "Auto")
+            {
+                await _projectPhaseRepository.RecalculatePhaseProgressAsync(phaseId);
+            }
+
+            return Json(new { success = true, progressMode });
         }
 
         // POST: Gantt/UpdateTaskDates

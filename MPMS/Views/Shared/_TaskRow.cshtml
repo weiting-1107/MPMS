@@ -8,6 +8,14 @@
         <div class="text-muted" style="font-size: 0.8rem;">
             📂 @Model.ProjectName &bull; 🏷️ @Model.PhaseName
         </div>
+        @if (Model.ChecklistCount > 0)
+        {
+            <div class="mt-1">
+                <span class="badge bg-light text-primary border" style="font-size: 0.7rem;">
+                    ✅ 檢核 @Model.ChecklistDoneCount/@Model.ChecklistCount (@Model.ChecklistProgressPct.ToString("0"))%
+                </span>
+            </div>
+        }
     </td>
     <td>
         <div class="d-flex align-items-center">

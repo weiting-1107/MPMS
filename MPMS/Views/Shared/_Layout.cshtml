@@ -12,7 +12,7 @@
 <body>
     <header>
         <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-dark bg-dark border-bottom box-shadow mb-4">
-            <div class="container">
+            <div class="container-fluid px-4">
                 <a class="navbar-brand fw-bold text-gradient" asp-area="" asp-controller="Dashboard" asp-action="Index">
                     <span style="background: linear-gradient(135deg, #a5b4fc 0%, #818cf8 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">MPMS</span>
                 </a>
@@ -37,6 +37,12 @@
                             <li class="nav-item">
                                 <a class="nav-link" href="/Meeting/Trends">歷史進度趨勢</a>
                             </li>
+                            @if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
+                            {
+                                <li class="nav-item">
+                                    <a class="nav-link" href="/Block">任務處理中心</a>
+                                </li>
+                            }
                             @if (User.IsInRole("ADMIN"))
                             {
                                 <li class="nav-item dropdown">
@@ -85,14 +91,14 @@
             </div>
         </nav>
     </header>
-    <div class="container">
+    <div class="container-fluid px-4">
         <main role="main" class="pb-5">
             @RenderBody()
         </main>
     </div>
 
     <footer class="border-top footer text-muted bg-light py-3 mt-auto">
-        <div class="container text-center">
+        <div class="container-fluid px-4 text-center">
             &copy; 2026 - MPMS 多專案管理系統 - 適用於進度、會議、附件與審查之全局控管
         </div>
     </footer>

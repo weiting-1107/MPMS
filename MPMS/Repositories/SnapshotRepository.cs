@@ -155,7 +155,8 @@ namespace MPMS.Repositories
                     INSERT INTO dbo.MPMS_SNAPSHOT_TASK (
                         snapshot_id, task_id, task_status, owner_user_id, due_date, 
                         attachment_count, latest_review_result, blocked_reason,
-                        planned_start_date, predecessor_summary
+                        planned_start_date, predecessor_summary,
+                        checklist_count, checklist_done_count, checklist_progress_pct
                     )
                     SELECT 
                         @SnapshotId, 
@@ -171,9 +172,20 @@ namespace MPMS.Repositories
                             SELECT STRING_AGG(CAST(dep.predecessor_task_id AS VARCHAR), ',')
                             FROM dbo.MPMS_TASK_DEPENDENCY dep
                             WHERE dep.task_id = t.task_id
-                        ) as predecessor_summary
+                        ) as predecessor_summary,
+                        ISNULL(chk.ChecklistCount, 0),
+                        ISNULL(chk.ChecklistDoneCount, 0),
+                        ISNULL(chk.ChecklistProgressPct, 0)
                     FROM dbo.MPMS_TASK t
                     INNER JOIN dbo.MPMS_PROJECT_PHASE ph ON t.phase_id = ph.phase_id
+                    OUTER APPLY (
+                        SELECT 
+                            COUNT(checklist_id) as ChecklistCount,
+                            SUM(CASE WHEN is_done = 1 THEN 1 ELSE 0 END) as ChecklistDoneCount,
+                            CASE WHEN COUNT(checklist_id) > 0 THEN CAST(SUM(CASE WHEN is_done = 1 THEN 1.0 ELSE 0.0 END) * 100.0 / COUNT(checklist_id) AS DECIMAL(5,2)) ELSE 0.00 END as ChecklistProgressPct
+                        FROM dbo.MPMS_TASK_CHECKLIST
+                        WHERE task_id = t.task_id
+                    ) chk
                     WHERE ph.project_id = @ProjectId";
                 await conn.ExecuteAsync(sqlTask, new { SnapshotId = snapshotId, ProjectId = projectId }, transaction: trans);
 

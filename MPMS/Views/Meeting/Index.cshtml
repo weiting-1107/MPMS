@@ -6,7 +6,7 @@
 
     var tasksDue = (IEnumerable<MPMS.Models.TaskModel>)ViewBag.TasksDue;
     var tasksUpdated = (IEnumerable<MPMS.Models.TaskModel>)ViewBag.TasksUpdated;
-    var tasksBlocked = (IEnumerable<MPMS.Models.TaskModel>)ViewBag.TasksBlocked;
+    var tasksBlocked = (IEnumerable<MPMS.Models.TaskBlockLog>)ViewBag.TasksBlocked;
     var tasksReviewing = (IEnumerable<MPMS.Models.TaskModel>)ViewBag.TasksReviewing;
     var tasksCompleted = (IEnumerable<MPMS.Models.TaskModel>)ViewBag.TasksCompleted;
     var attachments = (IEnumerable<MPMS.Models.TaskAttachment>)ViewBag.Attachments;
@@ -251,6 +251,14 @@
                                                     <div class="text-muted" style="font-size: 0.8rem;">
                                                         📂 @t.ProjectName &bull; 🏷️ @t.PhaseName
                                                     </div>
+                                                    @if (t.ChecklistCount > 0)
+                                                    {
+                                                        <div class="mt-1">
+                                                            <span class="badge bg-light text-primary border" style="font-size: 0.7rem;">
+                                                                ✅ 檢核 @t.ChecklistDoneCount/@t.ChecklistCount (@t.ChecklistProgressPct.ToString("0"))%
+                                                            </span>
+                                                        </div>
+                                                    }
                                                 </td>
                                                 <td>
                                                     <div class="d-flex align-items-center">
@@ -374,33 +382,111 @@
                                 <thead>
                                     <tr class="text-muted fs-7 text-uppercase">
                                         <th>任務 / 專案 / 專案階段</th>
-                                        <th>負責人</th>
-                                        <th>卡關原因</th>
-                                        <th>截止日</th>
+                                        <th>負責與協助人員</th>
+                                        <th>卡關詳情</th>
+                                        <th>影響程度 / 預計解除日</th>
+                                        <th>週會焦點</th>
                                         <th>操作</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @if (!tasksBlocked.Any())
                                     {
-                                        <tr><td colspan="5" class="text-center py-4 text-muted">目前沒有卡關任務。</td></tr>
+                                        <tr><td colspan="6" class="text-center py-4 text-muted">目前沒有卡關任務。</td></tr>
                                     }
                                     else
                                     {
                                         foreach (var t in tasksBlocked)
                                         {
+                                            var impactBadgeClass = t.ImpactLevel switch
+                                            {
+                                                "High" => "bg-danger",
+                                                "Medium" => "bg-warning text-dark",
+                                                _ => "bg-info text-dark"
+                                            };
+                                            var statusBadgeClass = t.BlockStatus switch
+                                            {
+                                                "Open" => "bg-secondary",
+                                                "InProgress" => "bg-primary",
+                                                "WaitingExternal" => "bg-warning text-dark",
+                                                _ => "bg-success"
+                                            };
                                             <tr>
                                                 <td>
-                                                    <a href="/Task/Details/@t.TaskId" class="fw-bold text-dark text-decoration-none">@t.TaskTitle</a>
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <a href="/Task/Details/@t.TaskId" class="fw-bold text-dark text-decoration-none">@t.TaskTitle</a>
+                                                        @if (t.IsMilestone)
+                                                        {
+                                                            <span class="badge bg-danger-soft text-danger fs-8 rounded-pill">📌 里程碑</span>
+                                                        }
+                                                    </div>
                                                     <div class="text-muted" style="font-size: 0.8rem;">
                                                         📂 @t.ProjectName &bull; 🏷️ @t.PhaseName
                                                     </div>
                                                 </td>
-                                                <td>@t.OwnerUserName</td>
                                                 <td>
-                                                    <span class="text-danger fw-semibold">@t.BlockedReason</span>
+                                                    <div>負責人: <span class="fw-semibold">@t.OwnerUserName</span></div>
+                                                    <div class="text-muted small">
+                                                        協助人: @(string.IsNullOrEmpty(t.HelperName) ? "未指派" : t.HelperName)
+                                                    </div>
                                                 </td>
-                                                <td>@t.DueDate.ToString("yyyy-MM-dd")</td>
+                                                <td>
+                                                    <div>
+                                                        <span class="badge @statusBadgeClass me-1">@t.BlockStatus</span>
+                                                        <span class="badge bg-light text-dark border">@t.BlockType</span>
+                                                    </div>
+                                                    <div class="fw-semibold text-danger small text-wrap mt-1" style="max-width: 250px;">
+                                                        原因: @t.BlockReason
+                                                    </div>
+                                                    <div class="text-muted small text-wrap" style="max-width: 250px;">
+                                                        需要協助: @t.HelpNeeded
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div>
+                                                        影響: <span class="badge @impactBadgeClass">@t.ImpactLevel</span>
+                                                    </div>
+                                                    <div class="text-muted small mt-1">
+                                                        卡關天數: <span class="text-danger fw-bold">@t.BlockedDays 天</span>
+                                                    </div>
+                                                    <div class="text-muted small">
+                                                        預計解除: @(t.ExpectedResolveDate?.ToString("yyyy-MM-dd") ?? "未設定")
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    @if (User.IsInRole("ADMIN") || User.IsInRole("PM"))
+                                                    {
+                                                        <form asp-controller="Block" asp-action="ToggleWeeklyFocus" method="post" class="d-inline">
+                                                            @Html.AntiForgeryToken()
+                                                            <input type="hidden" name="blockId" value="@t.BlockId" />
+                                                            <input type="hidden" name="isWeeklyFocus" value="@((!t.IsWeeklyFocus).ToString().ToLower())" />
+                                                            <input type="hidden" name="ReturnUrl" value="/Meeting/Index/@Model.MeetingId" />
+                                                            @if (t.IsWeeklyFocus)
+                                                            {
+                                                                <button type="submit" class="btn btn-sm btn-danger rounded-pill px-2 py-0 fs-8">
+                                                                    🔥 焦點 (取消)
+                                                                </button>
+                                                            }
+                                                            else
+                                                            {
+                                                                <button type="submit" class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-0 fs-8">
+                                                                    ☆ 設為焦點
+                                                                </button>
+                                                            }
+                                                        </form>
+                                                    }
+                                                    else
+                                                    {
+                                                        if (t.IsWeeklyFocus)
+                                                        {
+                                                            <span class="badge bg-danger-soft text-danger rounded-pill">🔥 週會焦點</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="text-muted small">-</span>
+                                                        }
+                                                    }
+                                                </td>
                                                 <td>
                                                     <a href="/Task/Details/@t.TaskId" class="btn btn-xs btn-outline-secondary rounded-pill">查看</a>
                                                 </td>

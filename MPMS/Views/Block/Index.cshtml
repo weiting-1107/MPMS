@@ -1,0 +1,975 @@
+@model List<MPMS.Models.TaskBlockLog>
+@{
+    ViewData["Title"] = "任務處理中心";
+    var projects = ViewBag.Projects as List<MPMS.Models.Project> ?? new List<MPMS.Models.Project>();
+    var users = ViewBag.Users as List<MPMS.Models.User> ?? new List<MPMS.Models.User>();
+    var phases = ViewBag.Phases as List<MPMS.Models.ProjectPhase> ?? new List<MPMS.Models.ProjectPhase>();
+
+    // Statistics counts
+    var totalOpenBlocks = Model.Count(b => b.BlockStatus != "Resolved" && b.BlockStatus != "Cancelled");
+    var milestoneBlocks = Model.Count(b => b.IsMilestone && b.BlockStatus != "Resolved" && b.BlockStatus != "Cancelled");
+    var overdueBlocks = Model.Count(b => b.BlockStatus != "Resolved" && b.BlockStatus != "Cancelled" && b.ExpectedResolveDate.HasValue && b.ExpectedResolveDate.Value < DateTime.Today);
+}
+
+<div class="container-fluid px-4">
+    <!-- Header with smooth gradient backdrop -->
+    <div class="p-4 rounded-4 mb-4 text-white shadow-sm" style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <h1 class="display-6 fw-bold mb-1">🛡️ 任務處理中心 (Task Center)</h1>
+                <p class="mb-0 text-indigo-200 fs-6">跨專案卡關與待審任務集中追蹤、審核與問題解除平台</p>
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="dropdown">
+                    <button class="btn btn-light dropdown-toggle fw-semibold btn-sm shadow-sm" type="button" id="dropdownRpt003" data-bs-toggle="dropdown" aria-expanded="false">
+                        📊 RPT003 卡關任務追蹤
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownRpt003">
+                        <li><a class="dropdown-item" href="javascript:void(0)" onclick="exportReport('Rpt003', 'csv')">📥 匯出 Excel (CSV)</a></li>
+                        <li><a class="dropdown-item" href="javascript:void(0)" onclick="exportReport('Rpt003', 'print')">🖨️ 預覽與列印 PDF</a></li>
+                    </ul>
+                </div>
+                <div class="dropdown">
+                    <button class="btn btn-warning dropdown-toggle fw-semibold text-dark btn-sm shadow-sm" type="button" id="dropdownRpt007" data-bs-toggle="dropdown" aria-expanded="false">
+                        ⚡ RPT007 卡關處理效率
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownRpt007">
+                        <li><a class="dropdown-item" href="javascript:void(0)" onclick="exportReport('Rpt007', 'csv')">📥 匯出 Excel (CSV)</a></li>
+                        <li><a class="dropdown-item" href="javascript:void(0)" onclick="exportReport('Rpt007', 'print')">🖨️ 預覽與列印 PDF</a></li>
+                    </ul>
+                </div>
+                <div class="bg-white bg-opacity-10 p-2 rounded-3 text-center border border-white border-opacity-10" style="min-width: 140px;">
+                    <span class="d-block text-uppercase small text-indigo-100" style="font-size: 0.7rem;">現在時間 (Local)</span>
+                    <span class="fw-bold font-monospace small">@DateTime.Now.ToString("yyyy-MM-dd HH:mm")</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Tiles -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm bg-glass rounded-3" style="background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(8px); border-left: 5px solid #ef4444 !important;">
+                <div class="card-body py-3 d-flex align-items-center justify-content-between">
+                    <div>
+                        <h6 class="text-muted mb-1">未排除卡關總數</h6>
+                        <h2 class="fw-bold text-danger mb-0">@totalOpenBlocks <span class="fs-6 text-muted fw-normal">個任務</span></h2>
+                    </div>
+                    <div class="rounded-pill p-3 bg-danger bg-opacity-10 text-danger fs-3">🚨</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm bg-glass rounded-3" style="background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(8px); border-left: 5px solid #f59e0b !important;">
+                <div class="card-body py-3 d-flex align-items-center justify-content-between">
+                    <div>
+                        <h6 class="text-muted mb-1">影響里程碑任務</h6>
+                        <h2 class="fw-bold text-warning mb-0">@milestoneBlocks <span class="fs-6 text-muted fw-normal">個任務</span></h2>
+                    </div>
+                    <div class="rounded-pill p-3 bg-warning bg-opacity-10 text-warning fs-3">💎</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm bg-glass rounded-3" style="background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(8px); border-left: 5px solid #ec4899 !important;">
+                <div class="card-body py-3 d-flex align-items-center justify-content-between">
+                    <div>
+                        <h6 class="text-muted mb-1">處理已逾期任務</h6>
+                        <h2 class="fw-bold text-pink mb-0" style="color: #ec4899;">@overdueBlocks <span class="fs-6 text-muted fw-normal">個項目</span></h2>
+                    </div>
+                    <div class="rounded-pill p-3 bg-pink bg-opacity-10 text-pink fs-3" style="background-color: rgba(236,72,153,0.1); color: #ec4899;">⏳</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-3">
+            <form method="get" action="/Block" id="filterForm">
+                <!-- 第一行：下拉選單 -->
+                <div class="row g-2 mb-2">
+                    <div class="col-md-2">
+                        <select name="projectId" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="">-- 全局所有專案 --</option>
+                            @foreach (var p in projects)
+                            {
+                                <option value="@p.ProjectId" selected="@(p.ProjectId == ViewBag.CurrentProjectId)">@p.ProjectName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <select name="phaseId" class="form-select form-select-sm" onchange="this.form.submit()" @(ViewBag.CurrentProjectId == null ? "disabled" : "")>
+                            <option value="">-- 所有專案階段 --</option>
+                            @foreach (var ph in phases)
+                            {
+                                <option value="@ph.PhaseId" selected="@(ph.PhaseId == ViewBag.CurrentPhaseId)">@ph.PhaseName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <select name="ownerUserId" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="">-- 負責人 --</option>
+                            @foreach (var u in users)
+                            {
+                                <option value="@u.UserId" selected="@(u.UserId == ViewBag.CurrentOwnerUserId)">@u.UserName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <select name="blockType" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="">-- 卡關類型 --</option>
+                            <option value="Technical" selected='@("Technical" == ViewBag.CurrentBlockType)'>技術問題</option>
+                            <option value="Customer" selected='@("Customer" == ViewBag.CurrentBlockType)'>客戶未回覆</option>
+                            <option value="Requirement" selected='@("Requirement" == ViewBag.CurrentBlockType)'>需求不清</option>
+                            <option value="Permission" selected='@("Permission" == ViewBag.CurrentBlockType)'>權限不足</option>
+                            <option value="Data" selected='@("Data" == ViewBag.CurrentBlockType)'>資料不足</option>
+                            <option value="WaitingOthers" selected='@("WaitingOthers" == ViewBag.CurrentBlockType)'>等待他人</option>
+                            <option value="Resource" selected='@("Resource" == ViewBag.CurrentBlockType)'>資源不足</option>
+                            <option value="Other" selected='@("Other" == ViewBag.CurrentBlockType)'>其他</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <select name="impactLevel" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="">-- 影響程度 --</option>
+                            <option value="High" selected='@("High" == ViewBag.CurrentImpactLevel)'>High (高)</option>
+                            <option value="Medium" selected='@("Medium" == ViewBag.CurrentImpactLevel)'>Medium (中)</option>
+                            <option value="Low" selected='@("Low" == ViewBag.CurrentImpactLevel)'>Low (低)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <select name="blockStatus" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="">-- 所有狀態 --</option>
+                            <option value="Open" selected='@("Open" == ViewBag.CurrentBlockStatus)'>Open (申報開立)</option>
+                            <option value="InProgress" selected='@("InProgress" == ViewBag.CurrentBlockStatus)'>InProgress (處理中)</option>
+                            <option value="WaitingExternal" selected='@("WaitingExternal" == ViewBag.CurrentBlockStatus)'>Waiting (等待外部)</option>
+                            <option value="Resolved" selected='@("Resolved" == ViewBag.CurrentBlockStatus)'>Resolved (已排除)</option>
+                            <option value="Cancelled" selected='@("Cancelled" == ViewBag.CurrentBlockStatus)'>Cancelled (已取消)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 第二行：開關按鈕 + 重設 -->
+                <div class="d-flex align-items-center gap-4">
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" name="isMilestone" value="true" id="milestoneSwitch" checked="@(ViewBag.CurrentIsMilestone == true)" onchange="this.form.submit()">
+                        <label class="form-check-label small" for="milestoneSwitch">里程碑</label>
+                    </div>
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" name="isWeeklyFocus" value="true" id="focusSwitch" checked="@(ViewBag.CurrentIsWeeklyFocus == true)" onchange="this.form.submit()">
+                        <label class="form-check-label small" for="focusSwitch">週焦點</label>
+                    </div>
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" name="isOverdue" value="true" id="overdueSwitch" checked="@(ViewBag.CurrentIsOverdue == true)" onchange="this.form.submit()">
+                        <label class="form-check-label small text-danger" for="overdueSwitch">逾期</label>
+                    </div>
+                    <a href="/Block" class="btn btn-sm btn-outline-secondary ms-auto">重設</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Alert Message Block -->
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show shadow-sm border-0" role="alert">
+            ✨ @TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0" role="alert">
+            ⚠️ @TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- Tabs Switcher -->
+    <ul class="nav nav-pills mb-3 gap-2" id="blockCenterTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active fw-bold px-4 py-2.5 shadow-sm d-flex align-items-center gap-2 border" id="blocked-tab" data-bs-toggle="pill" data-bs-target="#blocked-pane" type="button" role="tab" aria-controls="blocked-pane" aria-selected="true" style="border-radius: 10px;">
+                🚨 卡關任務列管 <span class="badge bg-danger rounded-pill">@Model.Count</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link fw-bold px-4 py-2.5 shadow-sm d-flex align-items-center gap-2 border text-dark bg-white" id="reviewing-tab" data-bs-toggle="pill" data-bs-target="#reviewing-pane" type="button" role="tab" aria-controls="reviewing-pane" aria-selected="false" style="border-radius: 10px;">
+                📋 待同儕審查任務 <span class="badge bg-warning text-dark rounded-pill">@ViewBag.ReviewingTasksCount</span>
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content shadow-sm rounded-3" id="blockCenterTabsContent">
+        <!-- Tab 1: Blocked Tasks -->
+        <div class="tab-pane fade show active" id="blocked-pane" role="tabpanel" aria-labelledby="blocked-tab">
+            <div class="card border-0 rounded-3">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
+                    <h5 class="mb-0 fw-bold text-dark">📋 卡關任務列管清單 (@Model.Count)</h5>
+                    <span class="badge bg-secondary rounded-pill">按里程碑與卡關天數排序</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
+                            <thead class="table-light text-muted uppercase">
+                                <tr>
+                                    <th scope="col" class="ps-4">任務與位置</th>
+                                    <th scope="col">負責人/協辦人</th>
+                                    <th scope="col">卡關類型</th>
+                                    <th scope="col" style="width: 25%;">卡關原因與協助事項</th>
+                                    <th scope="col" class="text-center">影響/天數</th>
+                                    <th scope="col">協助人/預計解除日</th>
+                                    <th scope="col">狀態/處理紀錄</th>
+                                    <th scope="col" class="text-center pe-4" style="width: 15%;">管理操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model.Count == 0)
+                                {
+                                    <tr>
+                                        <td colspan="8" class="text-center py-5 text-muted">
+                                            <div class="fs-1 mb-2">🎉</div>
+                                            目前無任何卡關項目或無符合此篩選條件的資料。
+                                        </td>
+                                    </tr>
+                                }
+                                @foreach (var log in Model)
+                                {
+                                    var isOverdue = log.BlockStatus != "Resolved" && log.BlockStatus != "Cancelled" && log.ExpectedResolveDate.HasValue && log.ExpectedResolveDate.Value < DateTime.Today;
+                                    var badgeColor = log.ImpactLevel switch
+                                    {
+                                        "High" => "danger",
+                                        "Medium" => "warning",
+                                        "Low" => "info",
+                                        _ => "secondary"
+                                    };
+                                    var typeText = log.BlockType switch
+                                    {
+                                        "Technical" => "💻 技術問題",
+                                        "Customer" => "📞 客戶未回覆",
+                                        "Requirement" => "❓ 需求不清",
+                                        "Permission" => "🔑 權限不足",
+                                        "Data" => "📊 資料不足",
+                                        "WaitingOthers" => "⏳ 等待他人",
+                                        "Resource" => "👥 資源不足",
+                                        _ => "📦 其他"
+                                    };
+
+                                    <tr class="@(log.BlockStatus == "Resolved" ? "table-success bg-opacity-10 text-muted" : log.BlockStatus == "Cancelled" ? "table-light text-muted text-decoration-line-through" : "")">
+                                        <!-- Task Details -->
+                                        <td class="ps-4">
+                                            <div class="d-flex align-items-center mb-1">
+                                                @if (log.IsMilestone)
+                                                {
+                                                    <span class="badge bg-warning text-dark me-1" title="里程碑任務">💎 里程碑</span>
+                                                }
+                                                <a href="/Task/Details/@log.TaskId" class="fw-bold text-indigo-700 text-decoration-none">@log.TaskTitle</a>
+                                            </div>
+                                            <div class="small text-muted font-monospace" style="font-size: 0.75rem;">
+                                                @log.ProjectName / @log.PhaseName
+                                            </div>
+                                        </td>
+
+                                        <!-- Users -->
+                                        <td>
+                                            <div>
+                                                <span class="badge bg-primary bg-opacity-10 text-primary" title="負責人">👤 @log.OwnerUserName</span>
+                                            </div>
+                                            @if (log.OwnerUserId != log.BlockedBy)
+                                            {
+                                                <div class="small text-muted mt-1" style="font-size: 0.75rem;">
+                                                    回報：@log.BlockedByName
+                                                </div>
+                                            }
+                                        </td>
+
+                                        <!-- Block Type -->
+                                        <td>
+                                            <span class="badge bg-light text-dark border py-1.5 px-2">@typeText</span>
+                                        </td>
+
+                                        <!-- Reasons -->
+                                        <td>
+                                            <div class="fw-bold mb-1">原因：@log.BlockReason</div>
+                                            <div class="small text-muted" style="border-left: 2px solid #cbd5e1; padding-left: 6px;">
+                                                協助：@log.HelpNeeded
+                                            </div>
+                                        </td>
+
+                                        <!-- Impact / Days -->
+                                        <td class="text-center">
+                                            <span class="badge bg-@badgeColor d-block mb-1">@log.ImpactLevel</span>
+                                            <span class="small font-monospace @(log.BlockedDays >= 5 && log.BlockStatus != "Resolved" ? "text-danger fw-bold" : "text-muted")">
+                                                已卡 @log.BlockedDays 天
+                                            </span>
+                                        </td>
+
+                                        <!-- Helper & Expected Date -->
+                                        <td>
+                                            <div>
+                                                @if (log.AssignedHelperUserId.HasValue)
+                                                {
+                                                    <span class="badge bg-success bg-opacity-10 text-success">🤝 @log.HelperName</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted small">未指派協助人</span>
+                                                }
+                                            </div>
+                                            <div class="small mt-1">
+                                                @if (log.ExpectedResolveDate.HasValue)
+                                                {
+                                                    <span class="font-monospace @(isOverdue ? "text-danger fw-bold border-bottom border-danger" : "text-muted")" title="@(isOverdue ? "已逾期" : "")">
+                                                        📅 @log.ExpectedResolveDate.Value.ToString("yyyy-MM-dd")
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted small">未設定預計日</span>
+                                                }
+                                            </div>
+                                        </td>
+
+                                        <!-- Status & Comments -->
+                                        <td>
+                                            <div class="mb-1">
+                                                @if (log.BlockStatus == "Open")
+                                                {
+                                                    <span class="badge bg-secondary">Open</span>
+                                                }
+                                                else if (log.BlockStatus == "InProgress")
+                                                {
+                                                    <span class="badge bg-primary">InProgress</span>
+                                                }
+                                                else if (log.BlockStatus == "WaitingExternal")
+                                                {
+                                                    <span class="badge bg-warning text-dark">Waiting</span>
+                                                }
+                                                else if (log.BlockStatus == "Resolved")
+                                                {
+                                                    <span class="badge bg-success">Resolved</span>
+                                                }
+                                                else if (log.BlockStatus == "Cancelled")
+                                                {
+                                                    <span class="badge bg-secondary bg-opacity-50 text-white">Cancelled</span>
+                                                }
+                                            </div>
+                                            <div class="small text-truncate" style="max-width: 160px; font-size: 0.75rem;" title="@(log.ResolveSummary ?? "無最新留言")">
+                                                @if (log.BlockStatus == "Resolved")
+                                                {
+                                                    <span class="text-success font-monospace">排除: @log.ResolveSummary</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted italic">最後異動：@log.BlockedAtUtc.AddHours(8).ToString("MM-dd HH:mm")</span>
+                                                }
+                                            </div>
+                                        </td>
+
+                                        <!-- Actions -->
+                                        <td class="text-center pe-4">
+                                            <div class="btn-group btn-group-sm" role="group">
+                                                <!-- Weekly Focus Switch -->
+                                                @if (log.BlockStatus != "Resolved" && log.BlockStatus != "Cancelled")
+                                                {
+                                                    <form method="post" action="/Block/ToggleWeeklyFocus" class="d-inline me-1">
+                                                        @Html.AntiForgeryToken()
+                                                        <input type="hidden" name="blockId" value="@log.BlockId" />
+                                                        <input type="hidden" name="isWeeklyFocus" value="@(log.IsWeeklyFocus ? "false" : "true")" />
+                                                        <input type="hidden" name="ReturnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+                                                        <button type="submit" class="btn btn-sm btn-outline-light text-dark border-secondary bg-white" title="@(log.IsWeeklyFocus ? "取消週會焦點" : "設為週會焦點")">
+                                                            @(log.IsWeeklyFocus ? "⭐" : "☆")
+                                                        </button>
+                                                    </form>
+                                                }
+
+                                                <!-- Detail/Comment Button -->
+                                                <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#commentModal-@log.BlockId" title="查看歷程與留言">
+                                                    💬
+                                                </button>
+
+                                                <!-- Checklist Button -->
+                                                <button class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#taskChecklistModal" data-task-id="@log.TaskId" data-task-title="@log.TaskTitle" title="檢視工作事項檢核清單">
+                                                    ✅
+                                                </button>
+
+                                                @if (log.BlockStatus != "Resolved" && log.BlockStatus != "Cancelled")
+                                                {
+                                                    <!-- PM Assign Button -->
+                                                    <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#assignModal-@log.BlockId" title="指派協助與策略">
+                                                        🤝
+                                                    </button>
+
+                                                    <!-- Resolve Button -->
+                                                    <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#resolveModal-@log.BlockId" title="卡關解除">
+                                                        🔓
+                                                    </button>
+                                                }
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 2: Pending Review Tasks -->
+        <div class="tab-pane fade" id="reviewing-pane" role="tabpanel" aria-labelledby="reviewing-tab">
+            <div class="card border-0 rounded-3">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
+                    <h5 class="mb-0 fw-bold text-dark">📋 待同儕審查任務清單 (@ViewBag.ReviewingTasksCount)</h5>
+                    <span class="badge bg-secondary rounded-pill">按送審時間排序</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
+                            <thead class="table-light text-muted uppercase">
+                                <tr>
+                                    <th scope="col" class="ps-4">任務與位置</th>
+                                    <th scope="col">負責人</th>
+                                    <th scope="col">主要審查人</th>
+                                    <th scope="col">送審時間/截止日</th>
+                                    <th scope="col" style="width: 30%;">完工說明與摘要</th>
+                                    <th scope="col" style="width: 20%;">完工附件</th>
+                                    <th scope="col" class="text-center pe-4" style="width: 15%;">管理操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @{
+                                    var reviewingTasks = ViewBag.ReviewingTasks as List<MPMS.Models.TaskModel> ?? new List<MPMS.Models.TaskModel>();
+                                }
+                                @if (reviewingTasks.Count == 0)
+                                {
+                                    <tr>
+                                        <td colspan="7" class="text-center py-5 text-muted">
+                                            <div class="fs-1 mb-2">🎉</div>
+                                            目前無任何待同儕審查的任務。
+                                        </td>
+                                    </tr>
+                                }
+                                @foreach (var task in reviewingTasks)
+                                {
+                                    var isOverdue = task.DueDate < DateTime.Today;
+                                    <tr>
+                                        <!-- Task Details -->
+                                        <td class="ps-4">
+                                            <div class="d-flex align-items-center mb-1">
+                                                @if (task.IsMilestone)
+                                                {
+                                                    <span class="badge bg-warning text-dark me-1" title="里程碑任務">💎 里程碑</span>
+                                                }
+                                                <a href="/Task/Details/@task.TaskId" class="fw-bold text-indigo-700 text-decoration-none">@task.TaskTitle</a>
+                                            </div>
+                                            <div class="small text-muted font-monospace" style="font-size: 0.75rem;">
+                                                @task.ProjectName / @task.PhaseName
+                                            </div>
+                                        </td>
+
+                                        <!-- Owner -->
+                                        <td>
+                                            <span class="badge bg-primary bg-opacity-10 text-primary">👤 @task.OwnerUserName</span>
+                                        </td>
+
+                                        <!-- Reviewer -->
+                                        <td>
+                                            <span class="badge bg-info bg-opacity-10 text-info">🔍 @(string.IsNullOrEmpty(task.ReviewerUserName) ? "未指派" : task.ReviewerUserName)</span>
+                                        </td>
+
+                                        <!-- Times -->
+                                        <td>
+                                            <div class="small">
+                                                送審: <span class="font-monospace text-muted">@(task.ReviewRequestedAt?.ToString("yyyy-MM-dd HH:mm") ?? "--")</span>
+                                            </div>
+                                            <div class="small mt-1">
+                                                截止: <span class="font-monospace @(isOverdue ? "text-danger fw-bold" : "text-muted")">@task.DueDate.ToString("yyyy-MM-dd")</span>
+                                            </div>
+                                        </td>
+
+                                        <!-- Complete Summary -->
+                                        <td>
+                                            <div class="text-secondary text-truncate" style="max-width: 280px;" title="@task.CompleteSummary">
+                                                @task.CompleteSummary
+                                            </div>
+                                        </td>
+
+                                        <!-- Attachments -->
+                                        <td>
+                                            @if (task.Attachments != null && task.Attachments.Any())
+                                            {
+                                                <div class="d-flex flex-column gap-1">
+                                                    @foreach (var att in task.Attachments)
+                                                    {
+                                                        <a href="/Task/DownloadAttachment/@att.AttachmentId" class="badge bg-light text-dark border text-decoration-none text-truncate d-inline-block text-start p-1.5" target="_blank" title="@att.OriginalFileName" style="max-width: 180px;">
+                                                            📎 @(att.OriginalFileName.Length > 18 ? att.OriginalFileName.Substring(0, 15) + "..." : att.OriginalFileName)
+                                                        </a>
+                                                    }
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted small">無附件</span>
+                                            }
+                                        </td>
+
+                                        <!-- Actions -->
+                                        <td class="text-center pe-4">
+                                            <button class="btn btn-sm btn-dark px-3 rounded-pill shadow-sm" data-bs-toggle="modal" data-bs-target="#peerReviewModal-@task.TaskId" title="進行同儕審查">
+                                                🛡️ 審查
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@foreach (var log in Model)
+{
+    var typeText = log.BlockType switch
+    {
+        "Technical" => "💻 技術問題",
+        "Customer" => "📞 客戶未回覆",
+        "Requirement" => "❓ 需求不清",
+        "Permission" => "🔑 權限不足",
+        "Data" => "📊 資料不足",
+        "WaitingOthers" => "⏳ 等待他人",
+        "Resource" => "👥 資源不足",
+        _ => "📦 其他"
+    };
+
+    <!-- 1. Assign Modal -->
+    <div class="modal fade" id="assignModal-@log.BlockId" tabindex="-1" aria-labelledby="assignModalLabel-@log.BlockId" aria-hidden="true">
+        <div class="modal-dialog text-start">
+            <div class="modal-content">
+                <form method="post" action="/Block/AssignHelper">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="blockId" value="@log.BlockId" />
+                    <input type="hidden" name="ReturnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold" id="assignModalLabel-@log.BlockId">🤝 指派卡關協助人員 & 預計解除日</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small">指定協助人員 (Helper)</label>
+                            <select name="assignedHelperUserId" class="form-select">
+                                <option value="">-- 未指定 / 無 --</option>
+                                @foreach (var u in users)
+                                {
+                                    <option value="@u.UserId" selected="@(u.UserId == log.AssignedHelperUserId)">@u.UserName (@u.RoleName)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small">預計卡關解除日</label>
+                            <input type="date" name="expectedResolveDate" class="form-control" value="@(log.ExpectedResolveDate?.ToString("yyyy-MM-dd"))" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small">處理策略 / 下一步 Actions</label>
+                            <textarea name="commentText" class="form-control" rows="3" placeholder="請填寫 PM 處理方針，如：『請協助聯繫客戶確認介面欄位，下週一回報』"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-success">更新指派</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Resolve Modal -->
+    <div class="modal fade" id="resolveModal-@log.BlockId" tabindex="-1" aria-labelledby="resolveModalLabel-@log.BlockId" aria-hidden="true">
+        <div class="modal-dialog text-start">
+            <div class="modal-content">
+                <form method="post" action="/Block/ResolveBlock">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="blockId" value="@log.BlockId" />
+                    <input type="hidden" name="taskRowVersionStr" value="@Convert.ToBase64String(log.RowVersion ?? new byte[0])" />
+                    <input type="hidden" name="ReturnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold text-danger" id="resolveModalLabel-@log.BlockId">🔓 解除卡關項目</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-warning small border-0 py-2">
+                            解除卡關後，任務狀態將會變更為「進行中 (Progress)」，負責人需重新循正常程序執行，並完成送審。
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small">卡關排除與解除說明 (Resolved Summary)</label>
+                            <textarea name="resolveSummary" class="form-control" rows="4" placeholder="請詳細填寫問題是如何排除的，例如：『已於今日下午與客戶取得協議，欄位格式已確認為字串。』" required></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-danger">確認解除</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Comments / History Modal -->
+    <div class="modal fade" id="commentModal-@log.BlockId" tabindex="-1" aria-labelledby="commentModalLabel-@log.BlockId" aria-hidden="true">
+        <div class="modal-dialog modal-lg text-start">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="commentModalLabel-@log.BlockId">💬 卡關處理與歷程留言紀錄</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="card border bg-light mb-3">
+                        <div class="card-body py-2.5">
+                            <h6 class="fw-bold mb-1">🚨 申報資訊：</h6>
+                            <div class="small">
+                                <strong>卡關類型：</strong> @typeText <br />
+                                <strong>卡關原因：</strong> @log.BlockReason <br />
+                                <strong>需要協助事項：</strong> @log.HelpNeeded
+                            </div>
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold mb-2">📋 歷程對話：</h6>
+                    <div class="comment-timeline mb-3" style="max-height: 250px; overflow-y: auto; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px;">
+                        <div id="comments-container-@log.BlockId">
+                            <div class="text-center py-3 text-muted small">讀取歷程中...</div>
+                        </div>
+                    </div>
+
+                    @if (log.BlockStatus != "Resolved" && log.BlockStatus != "Cancelled")
+                    {
+                        <!-- Add comment form -->
+                        <form method="post" action="/Block/AddComment" id="commentForm-@log.BlockId">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="blockId" value="@log.BlockId" />
+                            <input type="hidden" name="ReturnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+                            <div class="mb-2">
+                                <label class="form-label fw-bold small">新增處理進度留言</label>
+                                <textarea name="commentText" class="form-control form-control-sm" rows="2" placeholder="請描述處理進度或回報最新狀況" required></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-sm btn-primary">傳送留言</button>
+                        </form>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">關閉</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@foreach (var task in (List<MPMS.Models.TaskModel>)ViewBag.ReviewingTasks)
+{
+    <!-- 4. Peer Review Modal for Task Center -->
+    <div class="modal fade" id="peerReviewModal-@task.TaskId" tabindex="-1" aria-labelledby="peerReviewModalLabel-@task.TaskId" aria-hidden="true">
+        <div class="modal-dialog modal-lg text-start">
+            <div class="modal-content text-dark">
+                <form method="post" action="/Task/ProcessReview">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="taskId" value="@task.TaskId" />
+                    <input type="hidden" name="reviewId" value="@(task.CurrentReviewId ?? 0)" />
+                    <input type="hidden" name="taskRowVersionStr" value="@Convert.ToBase64String(task.RowVersion ?? new byte[0])" />
+                    <input type="hidden" name="reviewRowVersionStr" value="@Convert.ToBase64String(task.ReviewRowVersion ?? new byte[0])" />
+                    <input type="hidden" name="ReturnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+                    <div class="modal-header bg-dark text-white">
+                        <h5 class="modal-title fw-bold" id="peerReviewModalLabel-@task.TaskId">🛡️ 專案同儕審查控制面板</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="card border bg-light mb-3">
+                            <div class="card-body py-2.5">
+                                <h6 class="fw-bold mb-2 text-dark">📋 任務資訊：</h6>
+                                <div class="small text-secondary">
+                                    <strong>專案名稱：</strong> @task.ProjectName / @task.PhaseName <br />
+                                    <strong>任務名稱：</strong> @task.TaskTitle <br />
+                                    <strong>主辦人：</strong> @task.OwnerUserName <br />
+                                    <strong>送審說明：</strong> <span style="white-space: pre-wrap;">@task.CompleteSummary</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Attachments inside modal -->
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-dark">完工檢附附件</label>
+                            <div class="d-flex flex-wrap gap-2">
+                                @if (task.Attachments != null && task.Attachments.Any())
+                                {
+                                    foreach (var att in task.Attachments)
+                                    {
+                                        <a href="/Task/DownloadAttachment/@att.AttachmentId" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1" target="_blank">
+                                            📎 @att.OriginalFileName (@((att.FileSizeBytes / 1024.0).ToString("F1")) KB)
+                                        </a>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">此任務無檢附完工附件</span>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Checklist Status Block inside Modal -->
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-dark">📋 工作事項檢核狀態 (@task.ChecklistDoneCount/@task.ChecklistCount)</label>
+                            <div id="review-checklist-container-@task.TaskId" class="border rounded-3 p-2 bg-white small" style="max-height: 150px; overflow-y: auto;">
+                                <div class="text-center py-2 text-muted small">載入中...</div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold text-dark">審查結果判定</label>
+                            <div class="d-flex gap-2">
+                                <input type="radio" class="btn-check" name="reviewResult" id="btnApprove-@task.TaskId" value="Approved" checked autocomplete="off">
+                                <label class="btn btn-sm btn-outline-success w-50 rounded-3" for="btnApprove-@task.TaskId">✔️ 通過 (Done)</label>
+
+                                <input type="radio" class="btn-check" name="reviewResult" id="btnReject-@task.TaskId" value="Rejected" autocomplete="off">
+                                <label class="btn btn-sm btn-outline-danger w-50 rounded-3" for="btnReject-@task.TaskId">❌ 退回 (Reject)</label>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="reviewComment-@task.TaskId" class="form-label small fw-semibold text-dark">審查意見 / 退回原因 (必填)</label>
+                            <textarea id="reviewComment-@task.TaskId" name="reviewComment" class="form-control form-control-sm rounded-3" rows="3" placeholder="請說明同意通過的理由或需修正退回的原因..." required></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-dark btn-sm rounded-3">確認提交審查</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Task Checklist Modal -->
+<div class="modal fade" id="taskChecklistModal" tabindex="-1" aria-labelledby="taskChecklistModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-md">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="taskChecklistModalLabel">✅ 工作事項檢核清單</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <h6 class="fw-bold mb-3 text-dark text-truncate" id="tcl-modal-task-title">任務名稱</h6>
+                <div class="progress mb-3" style="height: 8px; border-radius: 4px;">
+                    <div id="tcl-modal-progress-bar" class="progress-bar bg-success" role="progressbar" style="width: 0%;"></div>
+                </div>
+                <div id="tcl-modal-container" class="list-group list-group-flush border-top">
+                    <div class="text-center py-4 text-muted small">
+                        <div class="spinner-border spinner-border-sm me-2" role="status"></div> 載入中...
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">關閉</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function() {
+            // Peer Review Modal Checklist Loader
+            $('[id^="peerReviewModal-"]').on('show.bs.modal', function() {
+                var modalId = $(this).attr('id');
+                var taskId = modalId.split('-')[1];
+                var container = $('#review-checklist-container-' + taskId);
+                
+                container.html('<div class="text-center py-2 text-muted small"><div class="spinner-border spinner-border-sm me-2" role="status"></div>載入中...</div>');
+                
+                $.getJSON('/Checklist/GetChecklists?taskId=' + taskId, function(res) {
+                    if (res.success && res.data) {
+                        var checklists = res.data;
+                        container.empty();
+                        
+                        if (checklists.length === 0) {
+                            container.html('<div class="text-center py-2 text-muted small">此任務無任何檢核項目。</div>');
+                            return;
+                        }
+
+                        checklists.forEach(function(item) {
+                            var isDone = item.isDone;
+                            var checkedMark = isDone ? '🟢' : '⚪';
+                            var textStyle = isDone ? 'text-decoration: line-through; color: #6c757d;' : 'font-weight: 500;';
+                            var badge = item.assignedUserName ? `<span class="badge bg-light text-primary border ms-2 fw-normal" style="font-size: 0.7rem;">${item.assignedUserName}</span>` : '';
+                            
+                            container.append(`
+                                <div class="d-flex align-items-center justify-content-between py-1 border-bottom border-light-subtle">
+                                    <div class="d-flex align-items-center text-truncate">
+                                        <span class="me-2">${checkedMark}</span>
+                                        <span style="${textStyle}" class="text-truncate">${escapeHtml(item.checklistTitle)}</span>
+                                    </div>
+                                    <div class="text-nowrap ms-2">
+                                        ${badge}
+                                    </div>
+                                </div>
+                            `);
+                        });
+                    } else {
+                        container.html('<div class="text-center py-2 text-danger small">載入失敗。</div>');
+                    }
+                }).fail(function() {
+                    container.html('<div class="text-center py-2 text-danger small">系統錯誤，載入失敗。</div>');
+                });
+            });
+
+            // Task Checklist Modal Handler
+            $('#taskChecklistModal').on('show.bs.modal', function(event) {
+                var button = $(event.relatedTarget);
+                var taskId = button.data('task-id');
+                var taskTitle = button.data('task-title');
+                
+                var modal = $(this);
+                modal.find('#tcl-modal-task-title').text('📌 ' + taskTitle);
+                
+                var container = modal.find('#tcl-modal-container');
+                var progressBar = modal.find('#tcl-modal-progress-bar');
+                
+                container.html('<div class="text-center py-4 text-muted small"><div class="spinner-border spinner-border-sm me-2" role="status"></div>載入中...</div>');
+                progressBar.css('width', '0%');
+
+                $.getJSON('/Checklist/GetChecklists?taskId=' + taskId, function(res) {
+                    if (res.success && res.data) {
+                        var checklists = res.data;
+                        container.empty();
+                        
+                        if (checklists.length === 0) {
+                            container.html('<div class="text-center py-4 text-muted small">此任務無任何檢核工作事項。</div>');
+                            progressBar.css('width', '0%');
+                            return;
+                        }
+
+                        var doneCount = 0;
+                        checklists.forEach(function(item) {
+                            var isDone = item.isDone;
+                            if (isDone) doneCount++;
+                            
+                            var checkedMark = isDone ? '🟢' : '⚪';
+                            var titleStyle = isDone ? 'text-decoration: line-through; color: #6c757d;' : 'font-weight: 500;';
+                            var badges = '';
+                            
+                            if (item.assignedUserName) {
+                                badges += `<span class="badge bg-light text-primary border ms-2 fw-normal">${item.assignedUserName}</span>`;
+                            }
+                            if (item.dueDate) {
+                                badges += `<span class="badge bg-light text-dark border ms-2 fw-normal">${item.dueDate.substring(0, 10)}</span>`;
+                            }
+
+                            var itemHtml = `
+                                <div class="list-group-item px-2 py-2.5 border-0 border-bottom d-flex align-items-center justify-content-between">
+                                    <div class="d-flex align-items-center text-truncate">
+                                        <span class="me-2">${checkedMark}</span>
+                                        <span style="${titleStyle}" class="text-truncate">${escapeHtml(item.checklistTitle)}</span>
+                                        ${badges}
+                                    </div>
+                                    ${item.checklistDesc ? `<span class="text-muted small text-truncate ms-2" style="max-width: 150px;" title="${escapeHtml(item.checklistDesc)}">${escapeHtml(item.checklistDesc)}</span>` : ''}
+                                </div>
+                            `;
+                            container.append(itemHtml);
+                        });
+
+                        var pct = Math.round((doneCount / checklists.length) * 100);
+                        progressBar.css('width', pct + '%');
+                    } else {
+                        container.html('<div class="text-center py-4 text-danger small">載入失敗。</div>');
+                    }
+                }).fail(function() {
+                    container.html('<div class="text-center py-4 text-danger small">系統錯誤，載入失敗。</div>');
+                });
+            });
+
+            function escapeHtml(unsafe) {
+                if (!unsafe) return "";
+                return unsafe
+                     .replace(/&/g, "&amp;")
+                     .replace(/</g, "&lt;")
+                     .replace(/>/g, "&gt;")
+                     .replace(/"/g, "&quot;")
+                     .replace(/'/g, "&#039;");
+            }
+
+            // Register event to load comments when comments modal is opened
+            $('[id^="commentModal-"]').on('show.bs.modal', function() {
+                var modalId = $(this).attr('id');
+                var blockId = modalId.split('-')[1];
+                var container = $('#comments-container-' + blockId);
+
+                container.html('<div class="text-center py-3 text-muted small"><div class="spinner-border spinner-border-sm me-2" role="status"></div>讀取留言歷程中...</div>');
+
+                $.getJSON('/Block/GetCommentsJson?blockId=' + blockId, function(data) {
+                    container.empty();
+                    if (!data || data.length === 0) {
+                        container.html('<div class="text-center py-3 text-muted small">尚無處理留言紀錄。</div>');
+                        return;
+                    }
+                    
+                    data.forEach(function(item) {
+                        var date = new Date(item.createdAtUtc);
+                        var formattedDate = date.getFullYear() + '-' + 
+                                            String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+                                            String(date.getDate()).padStart(2, '0') + ' ' + 
+                                            String(date.getHours()).padStart(2, '0') + ':' + 
+                                            String(date.getMinutes()).padStart(2, '0');
+                        
+                        var typeClass = "bg-secondary";
+                        var typeLabel = "留言";
+                        if (item.commentType === 'StatusChange') {
+                            typeClass = "bg-danger";
+                            typeLabel = "狀態變更";
+                        } else if (item.commentType === 'Assignment') {
+                            typeClass = "bg-success";
+                            typeLabel = "指派";
+                        } else if (item.commentType === 'Resolve') {
+                            typeClass = "bg-info text-dark";
+                            typeLabel = "排除";
+                        } else if (item.commentType === 'WeeklyFocus') {
+                            typeClass = "bg-warning text-dark";
+                            typeLabel = "週會焦點";
+                        }
+
+                        var itemHtml = `
+                            <div class="mb-2.5 pb-2 border-bottom">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <div>
+                                        <span class="badge ${typeClass} me-1.5">${typeLabel}</span>
+                                        <strong class="text-dark small">${item.creatorName}</strong>
+                                    </div>
+                                    <span class="text-muted font-monospace" style="font-size: 0.75rem;">${formattedDate}</span>
+                                </div>
+                                <div class="small text-secondary" style="white-space: pre-wrap;">${item.commentText}</div>
+                            </div>
+                        `;
+                        container.append(itemHtml);
+                    });
+
+                    // Scroll to bottom
+                    var scrollTimeline = container.parent();
+                    scrollTimeline.scrollTop(scrollTimeline[0].scrollHeight);
+                }).fail(function() {
+                    container.html('<div class="text-center py-3 text-danger small">讀取失敗。</div>');
+                });
+            });
+        });
+
+        function exportReport(reportName, format) {
+            var form = $('#filterForm');
+            var serialized = form.serialize();
+            var url = '/Block/' + (format === 'csv' ? 'Export' : 'Print') + reportName + '?' + serialized;
+            if (format === 'print') {
+                window.open(url, '_blank');
+            } else {
+                window.location.href = url;
+            }
+        }
+    </script>
+}

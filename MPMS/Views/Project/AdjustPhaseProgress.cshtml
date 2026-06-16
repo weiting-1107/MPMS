@@ -9,7 +9,7 @@
         <div class="card border-0 shadow-sm rounded-4">
             <div class="card-header bg-transparent border-0 pt-4 px-4">
                 <h4 class="card-title fw-bold text-dark mb-1">調整專案階段進度</h4>
-                <p class="text-muted small mb-0">手動調整專案階段的最新進度與狀態</p>
+                <p class="text-muted small mb-0">調整專案階段的進度計算模式與最新進度狀態</p>
             </div>
             
             <div class="card-body px-4 pb-4">
@@ -31,8 +31,36 @@
                         <h5 class="fw-bold text-dark">📍 @Model.PhaseName</h5>
                     </div>
 
-                    <!-- Progress Percentage -->
+                    <!-- Progress Mode -->
                     <div class="mb-4">
+                        <label class="form-label fw-semibold">進度計算模式</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="progressMode" id="modeManual" value="Manual" 
+                                       checked="@(Model.ProgressMode != "Auto")" onchange="onProgressModeChange('Manual')">
+                                <label class="form-check-label" for="modeManual">
+                                    <strong>✋ 手動設定</strong>
+                                    <span class="text-muted small d-block">PM 自行調整階段進度百分比</span>
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="progressMode" id="modeAuto" value="Auto" 
+                                       checked="@(Model.ProgressMode == "Auto")" onchange="onProgressModeChange('Auto')">
+                                <label class="form-check-label" for="modeAuto">
+                                    <strong>🔄 自動計算</strong>
+                                    <span class="text-muted small d-block">由階段所有任務進度平均自動計算</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Auto mode note -->
+                    <div id="autoModeNote" class="alert alert-info border-0 rounded-3 small @(Model.ProgressMode == "Auto" ? "" : "d-none")">
+                        ℹ️ <strong>自動計算模式</strong>：當任何任務的進度被更新時，系統將自動計算此階段內所有任務進度的平均值作為階段進度。您仍可在下方手動覆蓋當前數值（切換為手動模式後才能長期保留）。
+                    </div>
+
+                    <!-- Progress Percentage -->
+                    <div class="mb-4" id="progressInputSection">
                         <label for="manualProgressPct" class="form-label fw-semibold">進度百分比 (%)</label>
                         <div class="row align-items-center g-3">
                             <div class="col">
@@ -70,6 +98,15 @@
 
 @section Scripts {
     <script>
+        function onProgressModeChange(mode) {
+            const note = document.getElementById('autoModeNote');
+            if (mode === 'Auto') {
+                note.classList.remove('d-none');
+            } else {
+                note.classList.add('d-none');
+            }
+        }
+
         function updateProgressInput(val) {
             document.getElementById('manualProgressPct').value = val;
             if (val == 100) {
@@ -99,3 +136,4 @@
         }
     </script>
 }
+
